@@ -3,7 +3,6 @@ import cors from "cors";
 import cookieParser from "cookie-parser";
 import dotenv from "dotenv";
 import dns from "dns";
-
 import connectDB from "./configs/db.js";
 import connectCloudinary from "./configs/cloudinary.js";
 

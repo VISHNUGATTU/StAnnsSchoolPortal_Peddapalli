@@ -406,3 +406,190 @@ export const getSystemHealth = async (req, res) => {
     });
   }
 };
+
+export const getFacultyCount = async (req, res) => {
+  try {
+    // 1. Get total faculty count
+    const totalFaculty = await Faculty.countDocuments();
+
+    // 2. Aggregate faculty by department
+    const departmentDistribution = await Faculty.aggregate([
+      {
+        $group: {
+          _id: "$department", // Assuming your schema has a 'department' field
+          count: { $sum: 1 }
+        }
+      },
+      {
+        $project: {
+          department: "$_id",
+          count: 1,
+          _id: 0
+        }
+      },
+      { $sort: { count: -1 } } // Sort by highest count first
+    ]);
+
+    // 3. Get total number of distinct departments
+    const departmentCount = departmentDistribution.length;
+
+    // Send the structured data to the frontend
+    res.status(200).json({
+      totalFaculty,
+      departmentCount,
+      departmentData: departmentDistribution
+    });
+
+  } catch (error) {
+    console.error("Error fetching dashboard data:", error);
+    res.status(500).json({ message: "Server Error", error: error.message });
+  }
+};
+
+export const getStudentStats = async (req, res) => {
+  try {
+    // 1. Get total student count
+    const totalStudents = await Student.countDocuments();
+
+    // 2. Aggregate total students and low-attendance students per department
+    const departmentStats = await Student.aggregate([
+      {
+        $group: {
+          _id: "$branch",
+          totalCount: { $sum: 1 },
+          // Count only if attendance is less than 75
+          lowAttendanceCount: {
+            $sum: {
+              $cond: [{ $lt: ["$attendancePercentage", 75] }, 1, 0]
+            }
+          }
+        }
+      },
+      {
+        $project: {
+          department: "$_id",
+          count: "$totalCount",
+          lowAttendance: "$lowAttendanceCount",
+          _id: 0
+        }
+      },
+      { $sort: { count: -1 } } // Sort by largest department first
+    ]);
+
+    // 3. Get total number of distinct departments
+    const departmentCount = departmentStats.length;
+
+    res.status(200).json({
+      totalStudents,
+      departmentCount,
+      departmentData: departmentStats
+    });
+
+  } catch (error) {
+    console.error("Error fetching student stats:", error);
+    res.status(500).json({ message: "Server Error", error: error.message });
+  }
+};
+
+export const getComprehensiveAnalytics = async (req, res) => {
+  try {
+    // 1. Run independent top-level queries in parallel for performance
+    const [
+      studentCount,
+      facultyCount,
+      activeSchedulesCount,
+      lowAttendanceCount,
+      avgAttendanceResult
+    ] = await Promise.all([
+      Student.countDocuments(),
+      Faculty.countDocuments(),
+      FacultySchedule.countDocuments({ isActive: true }), // Active timetables
+      Student.countDocuments({ "attendanceSummary.percentage": { $lt: 75 } }),
+      // Calculate real average attendance across all students
+      Student.aggregate([
+        { $group: { _id: null, average: { $avg: "$attendanceSummary.percentage" } } }
+      ])
+    ]);
+
+    // Format average attendance (handle edge case if DB is empty)
+    const avgAttendance = avgAttendanceResult.length > 0 
+      ? parseFloat(avgAttendanceResult[0].average.toFixed(1)) 
+      : 0;
+
+    // 2. Population Distribution
+    const population = [
+      { name: "Students", value: studentCount },
+      { name: "Faculty", value: facultyCount }
+    ];
+
+    // 3. Department / Branch Ratios
+    // Students group by 'branch', Faculty groups by 'department'
+    const studentBranchStats = await Student.aggregate([
+      { 
+        $group: { 
+          _id: "$branch", 
+          students: { $sum: 1 },
+          avgAttendance: { $avg: "$attendanceSummary.percentage" } 
+        } 
+      }
+    ]);
+    
+    const facultyDeptStats = await Faculty.aggregate([
+      { $group: { _id: "$department", faculty: { $sum: 1 } } }
+    ]);
+
+    // Merge them into one cohesive array
+    const departmentData = studentBranchStats.map(studentStat => {
+      // Try to find matching faculty department (e.g., matching "CSE" with "CSE")
+      const facultyStat = facultyDeptStats.find(f => f._id === studentStat._id);
+      return {
+        dept: studentStat._id || "Unknown",
+        students: studentStat.students,
+        faculty: facultyStat ? facultyStat.faculty : 0,
+        avgAttendance: studentStat.avgAttendance ? parseFloat(studentStat.avgAttendance.toFixed(1)) : 0
+      };
+    });
+
+    // 4. Student Year Distribution (Replaces the 'Fee Status' analytic)
+    const yearStats = await Student.aggregate([
+      { $group: { _id: "$year", count: { $sum: 1 } } },
+      { $sort: { _id: 1 } } // Sort Year 1 to 4
+    ]);
+    
+    const yearDistribution = yearStats.map(stat => ({
+      name: `Year ${stat._id}`,
+      value: stat.count
+    }));
+
+    // 5. Attendance Trends 
+    // Note: Since your schema only tracks current total attendance, we cannot query 
+    // historical months dynamically yet. You would need an Attendance history collection.
+    // For now, returning mocked historical data to keep the area chart functioning.
+    const attendanceTrends = [
+      { month: "Sep", attendance: 92 },
+      { month: "Oct", attendance: 88 },
+      { month: "Nov", attendance: 85 },
+      { month: "Dec", attendance: 81 },
+      { month: "Jan", attendance: 86 },
+      { month: "Feb", attendance: avgAttendance } // Tie the current month to real data
+    ];
+
+    // Send the response exactly how the React component expects it
+    res.status(200).json({
+      kpis: {
+        totalUsers: studentCount + facultyCount,
+        avgAttendance,
+        activeCourses: activeSchedulesCount, // Mapped to active schedules
+        criticalAlerts: lowAttendanceCount
+      },
+      population,
+      departmentData,
+      yearDistribution, // Will use this for the Donut chart
+      attendanceTrends
+    });
+
+  } catch (error) {
+    console.error("Analytics Error:", error);
+    res.status(500).json({ message: "Failed to load analytics data", error: error.message });
+  }
+};

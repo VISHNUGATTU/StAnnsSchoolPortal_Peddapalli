@@ -5,6 +5,7 @@ import Attendance from "../models/Attendance.js";
 import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import nodemailer from 'nodemailer';
 import { v2 as cloudinary } from "cloudinary";
 import { logAction } from "../configs/logger.js"; // ✅ Imported Logger
 
@@ -503,6 +504,9 @@ export const markAttendance = async (req, res) => {
     if (!scheduleDoc) return res.status(404).json({ success: false, message: "Class not found" });
     const schedule = scheduleDoc.timetable[0];
 
+    // 👇 ADD THIS: Determine weight based on class type
+    const classWeight = schedule.type === 'Lab' ? 3 : 1;
+
     const newAbsentIds = attendanceData
       .filter(r => r.status === "Absent")
       .map(r => r.studentId);
@@ -555,15 +559,16 @@ export const markAttendance = async (req, res) => {
         subRec = currentRecords[subIndex];
       }
 
+      // 👇 APPLY THE WEIGHT HERE INSTEAD OF 1
       if (!isUpdate || subRec.totalClasses === 0) {
-        subRec.totalClasses += 1;
-        if (!isNowAbsent) subRec.presentClasses += 1;
+        subRec.totalClasses += classWeight;
+        if (!isNowAbsent) subRec.presentClasses += classWeight;
       } else {
         const wasAbsent = oldAbsentIds.includes(studentIdStr);
         if (wasAbsent && !isNowAbsent) {
-          subRec.presentClasses += 1;
+          subRec.presentClasses += classWeight;
         } else if (!wasAbsent && isNowAbsent) {
-          subRec.presentClasses -= 1;
+          subRec.presentClasses -= classWeight;
         }
       }
 
@@ -807,7 +812,7 @@ export const getSectionAnalytics = async (req, res) => {
   section: { $regex: new RegExp(`^${section}$`, "i") },
   // Optional: Only fetch students who actually have a record for this subject
   "attendanceRecord.subject": { $regex: new RegExp(`^${subject}$`, "i") } 
-}).select("name rollno phno attendanceRecord");
+}).select("name rollno mail phno attendanceRecord");
 
 const analytics = students.map(student => {
   // 🔥 FIX: Ensure we find the subject record case-insensitively
@@ -824,6 +829,7 @@ const analytics = students.map(student => {
     name: student.name,
     rollno: student.rollno,
     phno: student.phno, // Needed for WhatsApp
+    mail: student.mail, // Needed for Email
     percentage: Number(stats.percentage.toFixed(1)),
     classesAttended: stats.presentClasses,
     totalClasses: stats.totalClasses,
@@ -939,5 +945,81 @@ export const getAllFacultyList = async (req, res) => {
     res.status(200).json({ success: true, data: facultyList });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const notifyDefaultersEmail = async (req, res) => {
+  try {
+    const { subject, defaulters } = req.body;
+
+    const transporter = nodemailer.createTransport({
+      host: 'smtp.gmail.com',
+      port: 465,
+      secure: true,
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS 
+      }
+    });
+
+    // We create an array of "Promises" to send all emails at once
+    const emailPromises = defaulters.map(student => {
+      const studentEmail = student.mail || student.email; 
+      if (!studentEmail) return Promise.resolve(); 
+
+      const mailOptions = {
+        from: `"VisOra System" <${process.env.EMAIL_USER}>`,
+        to: studentEmail,
+        subject: `⚠️ URGENT: Attendance Warning | ${subject}`,
+        // Professional HTML Template
+        html: `
+          <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: auto; border: 1px solid #e2e8f0; border-radius: 16px; overflow: hidden;">
+            <div style="background-color: #f43f5e; padding: 20px; text-align: center;">
+              <h1 style="color: white; margin: 0; font-size: 20px; text-transform: uppercase; letter-spacing: 1px;">Attendance Warning</h1>
+            </div>
+            <div style="padding: 30px; background-color: white;">
+              <p style="font-size: 16px; color: #1e293b;">Dear <strong>${student.name}</strong>,</p>
+              <p style="color: #64748b; line-height: 1.6;">This is an automated notification regarding your attendance record for the subject: <strong>${subject}</strong>.</p>
+              
+              <div style="margin: 25px 0; padding: 20px; background-color: #fff1f2; border-radius: 12px; border: 1px solid #fecdd3; text-align: center;">
+                <p style="margin: 0; color: #9f1239; font-size: 14px; font-weight: bold; text-transform: uppercase;">Current Attendance</p>
+                <h2 style="margin: 10px 0; color: #e11d48; font-size: 36px;">${student.percentage}%</h2>
+                <p style="margin: 0; color: #be123c; font-size: 14px;">Status: Critical (Below 75%)</p>
+              </div>
+
+              <div style="display: flex; justify-content: space-around; margin-bottom: 25px;">
+                <div style="text-align: center; flex: 1;">
+                  <p style="margin: 0; font-size: 12px; color: #94a3b8;">Attended</p>
+                  <p style="margin: 5px 0; font-size: 18px; font-weight: bold; color: #1e293b;">${student.classesAttended}</p>
+                </div>
+                <div style="text-align: center; flex: 1; border-left: 1px solid #e2e8f0;">
+                  <p style="margin: 0; font-size: 12px; color: #94a3b8;">Total Sessions</p>
+                  <p style="margin: 5px 0; font-size: 18px; font-weight: bold; color: #1e293b;">${student.totalClasses}</p>
+                </div>
+              </div>
+
+              <p style="color: #64748b; font-size: 14px; line-height: 1.6;">Please note that a minimum of <strong>75% attendance</strong> is mandatory for examination eligibility. You are advised to meet with your subject faculty immediately to discuss your status.</p>
+            </div>
+            <div style="background-color: #f8fafc; padding: 20px; text-align: center; border-top: 1px solid #e2e8f0;">
+              <p style="margin: 0; color: #94a3b8; font-size: 12px;">This is a system-generated email. Please do not reply.</p>
+            </div>
+          </div>
+        `
+      };
+
+      return transporter.sendMail(mailOptions);
+    });
+
+    // This handles all 60+ emails in parallel
+    await Promise.all(emailPromises);
+
+    res.status(200).json({ 
+      success: true, 
+      message: `Notifications successfully sent to ${defaulters.length} students.` 
+    });
+
+  } catch (error) {
+    console.error("Bulk Email Error:", error);
+    res.status(500).json({ success: false, message: "Server failed to dispatch bulk emails." });
   }
 };

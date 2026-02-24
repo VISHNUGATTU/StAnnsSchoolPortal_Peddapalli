@@ -113,7 +113,7 @@ const FacultyNavbar = ({ children }) => {
         <nav className="mt-6 space-y-1 pl-4 pr-2">
           <p className="px-4 text-xs font-bold text-slate-500 uppercase mb-2 tracking-wider">Main Menu</p>
           <SideItem to="/faculty/home" icon={<FiHome />} text="Home" />
-          <SideItem to="/faculty/dashboard" icon={<FiPieChart />} text="Dashboard" />
+          <SideItem to="/faculty/dashboard" icon={<FiPieChart />} text="Analytics" />
           <SideItem to="/faculty/schedule" icon={<FiCalendar />} text="My Schedule" />
           <SideItem to="/faculty/manual-attendance" icon={<FiUsers />} text="Manual Attendance" />
 

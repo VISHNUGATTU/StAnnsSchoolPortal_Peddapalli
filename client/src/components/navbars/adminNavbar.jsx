@@ -114,7 +114,7 @@ const AdminNavbar = ({ children }) => {
         <nav className="mt-6 space-y-1 pl-4 pr-2">
           <p className="px-4 text-xs font-bold text-slate-500 uppercase mb-2 tracking-wider">Main Menu</p>
           <SideItem to="/admin/home" icon={<FiHome />} text="Home" />
-          <SideItem to="/admin/dashboard" icon={<FiPieChart />} text="Dashboard" />
+          <SideItem to="/admin/dashboard" icon={<FiPieChart />} text="System Analytics" />
           <SideItem to="/admin/faculty-management" icon={<FiUsers />} text="Faculty Management" />
           <SideItem to="/admin/student-management" icon={<FiUsers />} text="Student Management" />
 

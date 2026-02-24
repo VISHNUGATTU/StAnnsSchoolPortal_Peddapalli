@@ -17,7 +17,8 @@ import {
   getAttendanceStatus,
   getFacultyClasses,
   changeFacultyPassword,
-  getAllFacultyList
+  getAllFacultyList,
+  notifyDefaultersEmail
 } from "../controllers/facultyController.js";
 import { facultyAuth } from "../middlewares/authFaculty.js";
 import {studentAuth} from "../middlewares/authStudent.js"
@@ -44,6 +45,7 @@ facultyRouter.get('/analytics', facultyAuth, getSectionAnalytics);
 facultyRouter.get('/attendance-status', facultyAuth, getAttendanceStatus);
 facultyRouter.get('/classes', facultyAuth, getFacultyClasses);
 facultyRouter.get('/all',isFacultyAuth, getAllFacultyList);
+facultyRouter.post('/notify-email', facultyAuth, notifyDefaultersEmail);
 
 
 
