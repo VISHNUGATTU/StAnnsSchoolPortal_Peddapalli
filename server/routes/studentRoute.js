@@ -15,6 +15,9 @@ import {
   getStudentFullSchedule,
   updateStudentPassword,
   updateStudentSettings,
+  getSettings,
+  updateProfile,
+  updatePassword
 } from "../controllers/studentController.js";
 import { studentAuth } from "../middlewares/authStudent.js";
 import {facultyAuth} from '../middlewares/authFaculty.js'
@@ -38,7 +41,9 @@ studentRouter.get("/history", studentAuth, getAttendanceHistory);
 studentRouter.get("/full-schedule", studentAuth, getStudentFullSchedule);
 studentRouter.put("/update-password", studentAuth, updateStudentPassword);
 studentRouter.put("/settings", studentAuth, updateStudentSettings);
-
+studentRouter.get("/settings", studentAuth, getSettings);
+studentRouter.put("/settings/profile", studentAuth, updateProfile);
+studentRouter.put("/settings/security", studentAuth, updatePassword);
 /* ================= ADMIN ONLY ROUTES ================= */
 studentRouter.post("/add", authAdmin, upload.single("image"), addStudent);
 studentRouter.get("/by-roll/:rollno", authAdmin, getStudentByRoll);

@@ -765,3 +765,91 @@ export const getStudentFullSchedule = async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
+
+export const getSettings = async (req, res) => {
+  try {
+    // 🔥 We don't need to query the database here! 
+    // Your auth middleware already fetched the student and attached it to req.student
+    const student = req.student; 
+
+    res.status(200).json({
+      success: true,
+      settings: {
+        profile: {
+          name: student.name,
+          mail: student.mail,
+          phno: student.phno,
+          rollno: student.rollno,
+          branch: student.branch,
+          year: student.year,
+          section: student.section
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching settings:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+// @desc    Update student profile (Mail & Phno only)
+// @route   PUT /api/student/settings/profile
+export const updateProfile = async (req, res) => {
+  try {
+    const { mail, phno } = req.body; 
+
+    // ✅ Changed req.user.id to req.userId to match your middleware
+    const updatedStudent = await Student.findByIdAndUpdate(
+      req.userId,
+      { mail, phno },
+      { new: true, runValidators: true }
+    );
+
+    if (!updatedStudent) {
+      return res.status(404).json({ success: false, message: 'Student not found' });
+    }
+
+    res.status(200).json({ success: true, message: 'Profile updated successfully' });
+  } catch (error) {
+    console.error('Error updating profile:', error);
+    res.status(500).json({ success: false, message: 'Server error while updating profile' });
+  }
+};
+
+// @desc    Update student password
+// @route   PUT /api/student/settings/security
+export const updatePassword = async (req, res) => {
+  try {
+    const { currentPassword, newPassword, confirmPassword } = req.body;
+
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      return res.status(400).json({ success: false, message: 'Please provide all password fields' });
+    }
+
+    if (newPassword !== confirmPassword) {
+      return res.status(400).json({ success: false, message: 'New passwords do not match' });
+    }
+
+    // ✅ Changed req.user.id to req.userId
+    // We must re-fetch here because your middleware uses .select("-password")
+    const student = await Student.findById(req.userId);
+    if (!student) {
+      return res.status(404).json({ success: false, message: 'Student not found' });
+    }
+
+    // Verify current password
+    const isMatch = await bcrypt.compare(currentPassword, student.password);
+    if (!isMatch) {
+      return res.status(401).json({ success: false, message: 'Incorrect current password' });
+    }
+
+    // Assign new password. Your schema's pre("save") hook will automatically hash it!
+    student.password = newPassword; 
+    await student.save();
+
+    res.status(200).json({ success: true, message: 'Password updated successfully' });
+  } catch (error) {
+    console.error('Error updating password:', error);
+    res.status(500).json({ success: false, message: 'Server error while updating password' });
+  }
+};

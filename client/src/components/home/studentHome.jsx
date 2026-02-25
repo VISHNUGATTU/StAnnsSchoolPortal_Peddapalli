@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   User, Clock, BookOpen, MapPin, 
   ChevronRight, Award, AlertCircle, 
-  Calendar as CalendarIcon, Zap
+  Calendar as CalendarIcon, Loader2
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -32,144 +32,199 @@ const StudentHome = () => {
     return () => clearInterval(timer);
   }, []);
 
-  if (loading) return <div className="h-screen flex items-center justify-center animate-pulse text-indigo-600 font-bold">VisOra Loading...</div>;
+  if (loading) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 text-indigo-600 space-y-4">
+        <Loader2 className="w-8 h-8 animate-spin" />
+        <p className="font-medium text-gray-500">Loading your dashboard...</p>
+      </div>
+    );
+  }
 
   const percentage = data?.overallPercentage || 0;
-  const statusColor = percentage >= 75 ? 'text-green-500' : 'text-red-500';
+  
+  // --- ATTENDANCE LOGIC ---
+  let statusColor = 'text-rose-500';
+  let statusMessage = "Warning: Your attendance is critically low. Immediate action is required to avoid penalties.";
+  
+  if (percentage >= 75) {
+    statusColor = 'text-emerald-500';
+    statusMessage = "You are maintaining good attendance. Keep up the consistency to ensure exam eligibility.";
+  } else if (percentage >= 50) {
+    statusColor = 'text-orange-500';
+    statusMessage = "Your attendance is below the 75% safe zone. Please prioritize your upcoming classes.";
+  }
 
   return (
-    <div className="p-6 space-y-6 min-h-screen bg-gray-50 text-gray-800 font-sans animate-in fade-in duration-500">
+    <div className="p-4 md:p-8 space-y-8 min-h-screen bg-gray-50/50 text-gray-800 font-sans animate-in fade-in duration-500 max-w-7xl mx-auto">
       
       {/* --- HEADER --- */}
-      <div className="flex justify-between items-center">
+      <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-black text-gray-900 tracking-tight">
-            Hey, {data?.greeting || "Student"}! 👋
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 tracking-tight">
+            Welcome back, {data?.greeting || "Student"}
           </h1>
-          <p className="text-gray-500 font-medium">Your academic pulse for today.</p>
+          <p className="text-gray-500 mt-1">Here is your academic overview for today.</p>
         </div>
-        <div className="text-right hidden sm:block">
-          <p className="text-xl font-bold text-indigo-600 font-mono">
+        <div className="hidden sm:flex flex-col items-end bg-white px-5 py-3 rounded-2xl border border-gray-200 shadow-sm">
+          <p className="text-lg font-semibold text-gray-900">
             {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
           </p>
-          <p className="text-xs text-gray-400 uppercase tracking-widest font-bold">
-            {currentTime.toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' })}
+          <p className="text-sm text-gray-500 font-medium">
+            {currentTime.toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long' })}
           </p>
+        </div>
+      </header>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        
+        {/* --- MAIN ATTENDANCE CARD --- */}
+        <div className="lg:col-span-2 bg-white rounded-2xl p-6 md:p-8 shadow-sm border border-gray-200 flex flex-col sm:flex-row items-center gap-8 relative overflow-hidden">
+          
+          {/* Progress Ring (Fixed with viewBox for accurate math) */}
+          <div className="relative flex-shrink-0">
+             <svg viewBox="0 0 100 100" className="w-32 h-32 md:w-40 md:h-40 transform -rotate-90">
+                <circle cx="50" cy="50" r="45" stroke="currentColor" strokeWidth="8" fill="transparent" className="text-gray-100" />
+                <circle 
+                  cx="50" cy="50" r="45" 
+                  stroke="currentColor" strokeWidth="8" fill="transparent" 
+                  strokeDasharray="283"
+                  strokeDashoffset={283 - (283 * percentage) / 100}
+                  strokeLinecap="round"
+                  className={`${statusColor} transition-all duration-1000 ease-out`}
+                />
+             </svg>
+             <div className="absolute inset-0 flex flex-col items-center justify-center">
+                <span className="text-3xl md:text-4xl font-bold text-gray-900">{Math.round(percentage)}%</span>
+             </div>
+          </div>
+
+          <div className="space-y-4 text-center sm:text-left flex-1">
+            <div>
+              <h2 className="text-xl font-bold text-gray-900">Attendance Status</h2>
+              <p className="text-gray-500 text-sm mt-2 leading-relaxed max-w-md">
+                {statusMessage}
+              </p>
+            </div>
+            <button 
+              onClick={() => navigate('/student/dashboard')}
+              className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-gray-900 text-white rounded-lg font-medium text-sm hover:bg-gray-800 transition-colors w-full sm:w-auto"
+            >
+              View Subject Breakdown <ChevronRight size={16}/>
+            </button>
+          </div>
+        </div>
+
+        {/* --- STATS CARDS --- */}
+        <div className="flex flex-col gap-6">
+           <StatCard 
+             icon={<Award className="w-6 h-6 text-indigo-600" />} 
+             label="Classes Attended" 
+             value={data?.summary?.presentClasses || 0} 
+             bg="bg-indigo-50" 
+           />
+           <StatCard 
+             icon={<CalendarIcon className="w-6 h-6 text-emerald-600" />} 
+             label="Total Conducted" 
+             value={data?.summary?.totalClasses || 0} 
+             bg="bg-emerald-50" 
+           />
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
-        {/* --- MAIN ATTENDANCE CARD --- */}
-        <div className="lg:col-span-2 bg-white rounded-3xl p-8 shadow-sm border border-gray-100 flex flex-col md:flex-row items-center gap-8 relative overflow-hidden group">
-          <div className="relative flex-shrink-0">
-             {/* Progress Ring */}
-             <svg className="w-40 h-40 transform -rotate-90">
-                <circle cx="80" cy="80" r="70" stroke="currentColor" strokeWidth="12" fill="transparent" className="text-gray-100" />
-                <circle cx="80" cy="80" r="70" stroke="currentColor" strokeWidth="12" fill="transparent" 
-                  strokeDasharray={440}
-                  strokeDashoffset={440 - (440 * percentage) / 100}
-                  className={`${statusColor} transition-all duration-1000 ease-out`}
-                />
-             </svg>
-             <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <span className="text-4xl font-black text-gray-900">{Math.round(percentage)}%</span>
-                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Attendance</span>
-             </div>
+        {/* --- TODAY'S TIMELINE --- */}
+        <div className="lg:col-span-2 bg-white rounded-2xl p-6 md:p-8 shadow-sm border border-gray-200">
+          <div className="flex items-center justify-between mb-8">
+            <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+              <Clock className="text-gray-400" size={20} /> Today's Schedule
+            </h3>
           </div>
 
-          <div className="space-y-4 text-center md:text-left">
-            <h2 className="text-2xl font-bold text-gray-800">Attendance Status</h2>
-            <p className="text-gray-500 text-sm leading-relaxed max-w-sm">
-              {percentage >= 75 
-                ? "You're in the safe zone! Keep maintaining this consistency to stay eligible for exams." 
-                : "Attention! Your attendance has dropped below the 75% threshold. Prioritize your upcoming classes."}
-            </p>
-            <button 
-              onClick={() => navigate('/student/dashboard')}
-              className="px-6 py-2.5 bg-indigo-600 text-white rounded-xl font-bold text-sm shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all flex items-center gap-2 mx-auto md:mx-0"
-            >
-              View Subject-wise <ChevronRight size={16}/>
-            </button>
-          </div>
-
-          <Zap className="absolute -top-6 -right-6 text-indigo-50 w-32 h-32 rotate-12" />
-        </div>
-
-        {/* --- MINI STATS --- */}
-        <div className="space-y-4">
-           <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-4">
-              <div className="p-3 bg-amber-50 text-amber-600 rounded-xl"><Award size={24}/></div>
-              <div>
-                <p className="text-xs font-bold text-gray-400 uppercase">Classes Attended</p>
-                <p className="text-2xl font-bold text-gray-900">{data?.summary?.presentClasses || 0}</p>
-              </div>
-           </div>
-           <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-4">
-              <div className="p-3 bg-blue-50 text-blue-600 rounded-xl"><CalendarIcon size={24}/></div>
-              <div>
-                <p className="text-xs font-bold text-gray-400 uppercase">Total Conducted</p>
-                <p className="text-2xl font-bold text-gray-900">{data?.summary?.totalClasses || 0}</p>
-              </div>
-           </div>
-        </div>
-      </div>
-
-      {/* --- TODAY'S TIMELINE --- */}
-      <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100">
-  <h3 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
-    <Clock className="text-indigo-600" size={22} /> Today's Schedule
-  </h3>
-
-  {/* ✅ ADDED EXTRA SAFETY CHECKS HERE */}
-  {!data || !data.todaysClasses || data.todaysClasses.length === 0 ? (
-    <div className="text-center py-10">
-      <p className="text-gray-400 italic">No classes scheduled for today.</p>
-    </div>
-  ): (
-          <div className="space-y-6 relative before:absolute before:inset-0 before:ml-5 before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-gradient-to-b before:from-transparent before:via-gray-200 before:to-transparent">
-            {data.todaysClasses.map((cls, idx) => (
-              <div key={idx} className="relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group is-active">
-                {/* Dot */}
-                <div className="flex items-center justify-center w-10 h-10 rounded-full border border-white bg-indigo-600 text-white shadow shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2">
-                   <BookOpen size={16} />
-                </div>
-                {/* Content */}
-                <div className="w-[calc(100%-4rem)] md:w-[45%] bg-white p-4 rounded-2xl border border-gray-100 shadow-sm group-hover:border-indigo-200 transition-all">
-                  <div className="flex justify-between items-start mb-1">
-                    <time className="font-mono text-xs font-bold text-indigo-600">{cls.time}</time>
-                    <span className="text-[10px] font-bold bg-gray-100 px-2 py-0.5 rounded text-gray-500 uppercase">{cls.type}</span>
-                  </div>
-                  <h4 className="font-bold text-gray-800">{cls.subject}</h4>
-                  <div className="flex items-center gap-3 mt-2 text-xs text-gray-400 font-medium">
-                    <span className="flex items-center gap-1"><MapPin size={12}/> {cls.room}</span>
+          {!data?.todaysClasses?.length ? (
+            <div className="text-center py-12 bg-gray-50 rounded-xl border border-dashed border-gray-200">
+              <p className="text-gray-500 font-medium">No classes scheduled for today.</p>
+              <p className="text-sm text-gray-400 mt-1">Enjoy your free time!</p>
+            </div>
+          ) : (
+            <div className="space-y-6 border-l-2 border-gray-100 ml-3">
+              {data.todaysClasses.map((cls, idx) => (
+                <div key={idx} className="relative pl-8 sm:pl-10">
+                  <div className="absolute -left-[9px] top-1.5 w-4 h-4 rounded-full border-4 border-white bg-indigo-500 shadow-sm" />
+                  <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm hover:border-gray-300 hover:shadow-md transition-all group">
+                    <div className="flex flex-wrap gap-2 justify-between items-start mb-2">
+                      <h4 className="font-semibold text-gray-900 text-lg group-hover:text-indigo-600 transition-colors">
+                        {cls.subject}
+                      </h4>
+                      <span className="text-xs font-semibold bg-gray-100 px-2.5 py-1 rounded-md text-gray-600 uppercase tracking-wide">
+                        {cls.type}
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-4 text-sm text-gray-500 font-medium">
+                      <span className="flex items-center gap-1.5 bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-md">
+                        <Clock size={14}/> {cls.time}
+                      </span>
+                      <span className="flex items-center gap-1.5">
+                        <MapPin size={14} className="text-gray-400"/> {cls.room}
+                      </span>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+              ))}
+            </div>
+          )}
+        </div>
 
-      {/* --- QUICK LINKS --- */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-         <QuickLink icon={<AlertCircle size={20}/>} label="Report Error" onClick={() => alert("Redirect to Support")} color="orange" />
-         <QuickLink icon={<Clock size={20}/>} label="History" onClick={() => navigate('/student/history')} color="blue" />
-         <QuickLink icon={<User size={20}/>} label="Profile" onClick={() => navigate('/student/profile')} color="indigo" />
-         <QuickLink icon={<CalendarIcon size={20}/>} label="Full Schedule" onClick={() => navigate('/student/schedule')} color="purple" />
+        {/* --- QUICK LINKS --- */}
+        <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-200 h-fit">
+          <h3 className="text-lg font-bold text-gray-900 mb-6">Quick Actions</h3>
+          {/* Changed to grid-cols-3 to perfectly balance the remaining links */}
+          <div className="grid grid-cols-3 gap-4">
+             <QuickLink icon={<AlertCircle size={20}/>} label="Support" onClick={() => alert("Redirect to Support")} variant="rose" />
+             <QuickLink icon={<User size={20}/>} label="Profile" onClick={() => navigate('/student/profile')} variant="indigo" />
+             <QuickLink icon={<CalendarIcon size={20}/>} label="Schedule" onClick={() => navigate('/student/schedule')} variant="slate" />
+          </div>
+        </div>
       </div>
 
     </div>
   );
 };
 
-const QuickLink = ({ icon, label, onClick, color }) => (
-  <button onClick={onClick} className={`p-4 bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md hover:border-${color}-200 transition-all flex flex-col items-center gap-2 group`}>
-    <div className={`p-2 bg-${color}-50 text-${color}-600 rounded-lg group-hover:scale-110 transition-transform`}>
+// Extracted Sub-components
+const StatCard = ({ icon, label, value, bg }) => (
+  <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm flex items-center gap-5 flex-1">
+    <div className={`p-4 rounded-xl ${bg}`}>
       {icon}
     </div>
-    <span className="text-xs font-bold text-gray-600">{label}</span>
-  </button>
+    <div>
+      <p className="text-sm font-medium text-gray-500">{label}</p>
+      <p className="text-3xl font-bold text-gray-900 mt-1">{value}</p>
+    </div>
+  </div>
 );
+
+const QuickLink = ({ icon, label, onClick, variant }) => {
+  const styles = {
+    rose: 'bg-rose-50 text-rose-600 hover:border-rose-200 hover:bg-rose-50/50',
+    indigo: 'bg-indigo-50 text-indigo-600 hover:border-indigo-200 hover:bg-indigo-50/50',
+    slate: 'bg-slate-100 text-slate-600 hover:border-slate-300 hover:bg-slate-50',
+  };
+
+  const activeStyle = styles[variant] || styles.slate;
+
+  return (
+    <button 
+      onClick={onClick} 
+      className="p-3 bg-white rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-all flex flex-col items-center gap-2 group"
+    >
+      <div className={`p-3 rounded-lg transition-colors ${activeStyle}`}>
+        {icon}
+      </div>
+      <span className="text-xs font-medium text-gray-700">{label}</span>
+    </button>
+  );
+};
 
 export default StudentHome;
