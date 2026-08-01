@@ -47,7 +47,13 @@ const Login = () => {
     
     debounceRef.current = setTimeout(async () => {
       try {
-        const { data } = await axios.post(`${backendUrl}/api/admin/check-id`, { loginId: trimmedId });
+            const { data } = await axios.post(
+            `${backendUrl}/api/admin/check-id`,
+            { loginId: trimmedId },
+            {
+              withCredentials: false,
+            }
+          );
         if (data.success && data.role) {
           setDetectedRole(data.role);
         } else {
