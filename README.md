@@ -204,10 +204,6 @@ VisOra/
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## Support
-
-For support, email ygk8555@gmail.com or join our Slack channel.
-
 ## Acknowledgments
 
 - Icons by [Lucide React](https://lucide.dev/)
