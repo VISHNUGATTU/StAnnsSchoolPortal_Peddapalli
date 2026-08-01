@@ -9,7 +9,7 @@ export const AppProvider = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  const backendUrl = import.meta.env.VITE_API_BASE_URL || "http://localhost:6446";
+  const backendUrl = import.meta.env.VITE_BACKEND_URL || "http://localhost:6446";
 
   axios.defaults.withCredentials = true;
 
