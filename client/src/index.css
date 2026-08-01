@@ -1,12 +1,37 @@
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@100..900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@400;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-
-*{
-  font-family: "Outfit",sans-serif;
+@layer base {
+  html, body {
+    @apply bg-school-background text-navy antialiased min-h-screen font-sans m-0 p-0;
+  }
+  
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-serif text-navy-dark;
+  }
 }
-.no-scrollbar::-webkit-scrollbar {
-    display: none;
+
+@layer components {
+  .text-accent {
+    @apply text-gold-dark;
+  }
+
+  .glass-panel {
+    @apply bg-white/80 backdrop-blur-lg border border-white/40 shadow-xl rounded-2xl;
+  }
+  
+  .btn-primary {
+    @apply bg-navy hover:bg-navy-light text-white font-medium py-2 px-4 rounded-lg transition-all duration-300 shadow-md hover:shadow-lg focus:ring-2 focus:ring-navy focus:ring-opacity-50 outline-none;
+  }
+
+  .btn-secondary {
+    @apply bg-gold hover:bg-gold-light text-navy-dark font-medium py-2 px-4 rounded-lg transition-all duration-300 shadow-md hover:shadow-lg focus:ring-2 focus:ring-gold focus:ring-opacity-50 outline-none;
+  }
+
+  .input-field {
+    @apply w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-navy focus:border-transparent outline-none transition-all bg-slate-50 hover:bg-white text-navy;
+  }
 }

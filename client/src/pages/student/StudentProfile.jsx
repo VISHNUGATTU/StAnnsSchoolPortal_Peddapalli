@@ -1,212 +1,198 @@
-import React, { useState } from 'react';
-import { User, Phone, Hash, MapPin, GraduationCap, Lock, Eye, EyeOff, ShieldCheck, Mail } from 'lucide-react';
-import { useAppContext } from '../../context/AppContext';
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import toast from 'react-hot-toast';
+import { 
+  FiUser, FiEdit2, FiMail, FiPhone, 
+  FiMapPin, FiCalendar, FiDroplet, FiBookOpen, FiUsers
+} from 'react-icons/fi';
+import { useAppContext } from '../../context/AppContext';
 
 const StudentProfile = () => {
-  const { studentInfo } = useAppContext();
-  const [loading, setLoading] = useState(false);
-  const [showPass, setShowPass] = useState(false);
+  const { backendUrl } = useAppContext();
+  const navigate = useNavigate();
   
-  const [passData, setPassData] = useState({ 
-    currentPassword: '', 
-    newPassword: '', 
-    confirmPassword: '' 
-  });
+  const [loading, setLoading] = useState(true);
+  const [profile, setProfile] = useState(null);
 
-  const handlePasswordUpdate = async (e) => {
-    e.preventDefault();
-
-    if (passData.newPassword !== passData.confirmPassword) {
-      return toast.error("New passwords do not match!");
-    }
-    if (passData.newPassword.length < 6) {
-      return toast.error("Password must be at least 6 characters");
-    }
-    
-    setLoading(true);
-    try {
-      const { data } = await axios.put('/api/student/update-password', {
-        currentPassword: passData.currentPassword,
-        newPassword: passData.newPassword
-      });
-
-      if (data.success) {
-        toast.success("Security Updated Successfully");
-        setPassData({ currentPassword: '', newPassword: '', confirmPassword: '' });
+  useEffect(() => {
+    const fetchProfile = async () => {
+      try {
+        const { data } = await axios.get(`${backendUrl}/api/student/profile`, { 
+          withCredentials: true 
+        });
+        
+        if (data.success) {
+          setProfile(data.profile);
+        }
+      } catch (error) {
+        toast.error("Failed to load profile details.");
+      } finally {
+        setLoading(false);
       }
-    } catch (err) {
-      toast.error(err.response?.data?.message || "Verification failed");
-    } finally {
-      setLoading(false);
-    }
-  };
+    };
 
-  const getAvatar = () => {
-    if (studentInfo?.image) return studentInfo.image;
-    return `https://ui-avatars.com/api/?name=${encodeURIComponent(
-      studentInfo?.name || "Student"
-    )}&background=f3f4f6&color=4b5563&size=128`;
-  };
+    fetchProfile();
+  }, [backendUrl]);
+
+  if (loading) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center h-[80vh]">
+        <div className="w-10 h-10 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mb-4"></div>
+        <p className="text-slate-500 font-bold animate-pulse">Loading student profile...</p>
+      </div>
+    );
+  }
+
+  if (!profile) return null;
+
+  // 🚨 SMART CHECK: Safely extract nested data based on AddStudent structure
+  const fatherName = profile.father?.name || profile.fatherName;
+  const motherName = profile.mother?.name || profile.motherName;
+  const guardianName = profile.guardian?.name || profile.guardianName;
+  const occupation = profile.father?.occupation || profile.mother?.occupation || profile.guardian?.occupation || profile.parentOccupation;
+  const phone = profile.father?.mobile || profile.mother?.mobile || profile.guardian?.mobile || profile.parentPhone;
+
+  const hasParentDetails = fatherName || motherName;
+  const sectionTitle = hasParentDetails ? "Parent Details" : "Guardian Details";
 
   return (
-    <div className="min-h-screen bg-gray-50/50 p-6 md:p-10 font-sans text-gray-900">
-      <div className="max-w-4xl mx-auto space-y-6">
-        
-        {/* HEADER CARD */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-          {/* Cover Banner */}
-          <div className="h-32 sm:h-40 bg-gradient-to-r from-blue-600 to-indigo-700 w-full relative">
-            <div className="absolute inset-0 bg-white/10 bg-[radial-gradient(#fff_1px,transparent_1px)] [background-size:16px_16px] opacity-20"></div>
-          </div>
+    <div className="p-4 md:p-8 w-full max-w-5xl mx-auto animate-fade-in font-sans pb-12 mt-4">
 
-          <div className="px-6 sm:px-10 pb-8 flex flex-col sm:flex-row items-center sm:items-end gap-6 sm:gap-8 relative -mt-16 sm:-mt-20">
-            {/* Avatar */}
-            <div className="w-32 h-32 sm:w-40 sm:h-40 rounded-full border-4 border-white shadow-md bg-white overflow-hidden shrink-0 z-10">
-              <img
-                src={getAvatar()}
-                alt="Profile"
-                className="w-full h-full object-cover"
-              />
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        
+        {/* Left Column: ID Card */}
+        <div className="lg:col-span-1 space-y-4">
+          
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-8 flex flex-col items-center text-center relative overflow-hidden group">
+            <div className="absolute top-0 left-0 w-full h-32 bg-gradient-to-br from-indigo-50 to-indigo-100/50"></div>
+            
+            <div className="w-32 h-32 rounded-2xl bg-white border-4 border-white shadow-lg overflow-hidden z-10 mb-5 flex items-center justify-center relative">
+              {profile.image ? (
+                <img src={profile.image} alt={profile.name} className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full bg-indigo-50 flex items-center justify-center text-4xl font-black text-indigo-300">
+                  {profile.name.charAt(0)}
+                </div>
+              )}
             </div>
 
-            {/* Name & Role */}
-            <div className="flex-1 text-center sm:text-left mb-2 mt-4 sm:mt-0">
-              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">{studentInfo?.name || "Student Name"}</h1>
-              <div className="flex items-center justify-center sm:justify-start gap-2 mt-2 text-sm font-medium text-gray-600">
-                <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-100 text-xs font-semibold tracking-wide uppercase">
-                  <ShieldCheck size={14} />
-                  Verified Active
-                </span>
-                <span className="px-2 py-1 bg-gray-100 rounded-md text-gray-600 text-xs font-semibold uppercase tracking-wider">
-                  {studentInfo?.rollno || "ROLL NUMBER"}
-                </span>
+            <h2 className="text-2xl font-black text-slate-800 z-10 leading-tight mb-1">{profile.name}</h2>
+            <p className="text-sm font-bold text-slate-400 z-10 uppercase tracking-wider mb-6">Student</p>
+
+            <div className="w-full space-y-3 z-10">
+              <div className="flex justify-between items-center py-2 border-b border-slate-100">
+                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Roll No</span>
+                <span className="font-black text-slate-700 bg-slate-50 px-2 py-0.5 rounded">{profile.rollno}</span>
+              </div>
+              <div className="flex justify-between items-center py-2 border-b border-slate-100">
+                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Class</span>
+                <span className="font-black text-slate-700">{profile.grade}</span>
+              </div>
+              <div className="flex justify-between items-center py-2 border-b border-slate-100">
+                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Section</span>
+                <span className="font-black text-slate-700">{profile.section}</span>
               </div>
             </div>
           </div>
+          
+          <button 
+            onClick={() => navigate('/student/profile/edit')}
+            className="w-full bg-white border border-slate-200 hover:border-indigo-600 text-slate-600 hover:text-indigo-600 px-6 py-4 rounded-3xl text-sm font-bold flex items-center justify-center gap-2 transition-all shadow-sm group shrink-0"
+          >
+            <FiEdit2 className="group-hover:scale-110 transition-transform" /> Edit Contact Details
+          </button>
         </div>
 
-        {/* BOTTOM GRID */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-
-          {/* LEFT: Academic Details */}
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden flex flex-col">
-            <div className="px-6 py-5 border-b border-gray-100 flex items-center gap-3">
-              <div className="p-2 bg-blue-50 text-blue-600 rounded-lg">
-                <GraduationCap size={18} />
+        {/* Right Column: Detailed Info */}
+        <div className="lg:col-span-2 space-y-6">
+          
+          {/* Personal Information */}
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="bg-slate-50 border-b border-slate-100 p-5 px-6 flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center">
+                <FiUser />
               </div>
-              <h3 className="text-base font-semibold text-gray-900">Academic Profile</h3>
+              <h3 className="font-bold text-slate-800 text-lg">Personal Information</h3>
             </div>
-
-            <div className="p-6 flex-1 flex flex-col gap-5">
-              <ReadOnlyItem icon={<GraduationCap />} label="Department" value={studentInfo?.branch} />
-              <ReadOnlyItem icon={<MapPin />} label="Year & Section" value={`${studentInfo?.year} Year - Section ${studentInfo?.section}`} />
-              <ReadOnlyItem icon={<Mail />} label="College Email" value={studentInfo?.mail} />
-              <ReadOnlyItem icon={<Phone />} label="Contact Number" value={studentInfo?.phno} />
-              
-              <div className="mt-auto pt-4 border-t border-gray-100">
-                <p className="text-xs text-gray-500 text-center">
-                  To update your academic details, please contact the administration office.
+            
+            <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1 flex items-center gap-1.5"><FiCalendar /> Date of Birth</p>
+                <p className="font-bold text-slate-800">
+                  {profile.dob ? new Date(profile.dob).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : 'N/A'}
                 </p>
               </div>
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1 flex items-center gap-1.5"><FiDroplet /> Blood Group</p>
+                <p className="font-bold text-rose-600 bg-rose-50 px-2 py-0.5 rounded inline-block">
+                  {profile.bloodGroup || 'N/A'}
+                </p>
+              </div>
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1 flex items-center gap-1.5"><FiMail /> Student Email</p>
+                <p className="font-bold text-slate-800 break-all">{profile.mail || 'N/A'}</p>
+              </div>
             </div>
           </div>
 
-          {/* RIGHT: Security Settings */}
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-            <div className="px-6 py-5 border-b border-gray-100 flex items-center gap-3">
-              <div className="p-2 bg-purple-50 text-purple-600 rounded-lg">
-                <Lock size={18} />
+          {/* Parent/Guardian Information */}
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="bg-slate-50 border-b border-slate-100 p-5 px-6 flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center">
+                <FiUsers />
               </div>
-              <h3 className="text-base font-semibold text-gray-900">Security Settings</h3>
+              <h3 className="font-bold text-slate-800 text-lg">{sectionTitle}</h3>
             </div>
-
-            <div className="p-6">
-              <form onSubmit={handlePasswordUpdate} className="space-y-5">
-                <PasswordField 
-                  label="Current Password" 
-                  value={passData.currentPassword} 
-                  show={showPass}
-                  toggle={() => setShowPass(!showPass)}
-                  onChange={(val) => setPassData({...passData, currentPassword: val})} 
-                />
-
-                <div className="h-px bg-gray-100 my-4" />
-
-                <PasswordField 
-                  label="New Password" 
-                  value={passData.newPassword} 
-                  show={showPass}
-                  toggle={() => setShowPass(!showPass)}
-                  onChange={(val) => setPassData({...passData, newPassword: val})} 
-                />
-
-                <PasswordField 
-                  label="Confirm New Password" 
-                  value={passData.confirmPassword} 
-                  show={showPass}
-                  toggle={() => setShowPass(!showPass)}
-                  onChange={(val) => setPassData({...passData, confirmPassword: val})} 
-                />
-
-                <div className="pt-2">
-                  <button 
-                    type="submit"
-                    disabled={loading || !passData.currentPassword || !passData.newPassword || !passData.confirmPassword}
-                    className="w-full inline-flex justify-center items-center gap-2 px-4 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {loading ? (
-                      <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div> Updating...</>
-                    ) : (
-                      "Update Password"
-                    )}
-                  </button>
+            
+            <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Conditional Rendering: Show Parents OR Guardian using dynamic nested values */}
+              {hasParentDetails ? (
+                <>
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">Father's Name</p>
+                    <p className="font-bold text-slate-800">{fatherName || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">Mother's Name</p>
+                    <p className="font-bold text-slate-800">{motherName || 'N/A'}</p>
+                  </div>
+                </>
+              ) : (
+                <div className="md:col-span-2">
+                  <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">Guardian's Name</p>
+                  <p className="font-bold text-slate-800">{guardianName || 'N/A'}</p>
                 </div>
-              </form>
+              )}
+              
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1 flex items-center gap-1.5"><FiBookOpen /> Occupation</p>
+                <p className="font-bold text-slate-800">{occupation || 'N/A'}</p>
+              </div>
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1 flex items-center gap-1.5"><FiPhone /> Contact Phone</p>
+                <p className="font-bold text-slate-800">{phone || 'N/A'}</p>
+              </div>
+              
+              <div className="md:col-span-2">
+                <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1 flex items-center gap-1.5"><FiMapPin /> Residential Address</p>
+                <p className="font-medium text-slate-700 bg-slate-50 p-3 rounded-xl border border-slate-100 leading-relaxed">
+                  {profile.address && typeof profile.address === 'object' ? (
+                    `${profile.address.houseNumber || ''}, ${profile.address.street || ''}, ${profile.address.villageCity || ''}, ${profile.address.mandal || ''}, ${profile.address.district || ''}, ${profile.address.state || ''} - ${profile.address.pinCode || ''}`.replace(/^,\s*|,\s*,\s*|,\s*$/, '')
+                  ) : (
+                    profile.address || 'No address provided.'
+                  )}
+                </p>
+              </div>
+              
             </div>
           </div>
 
         </div>
+
       </div>
     </div>
   );
 };
-
-// --- SUB-COMPONENTS FOR CLEANER CODE ---
-
-const PasswordField = ({ label, value, onChange, show, toggle }) => (
-  <div className="space-y-1 relative">
-    <label className="block text-sm font-medium text-gray-700">{label}</label>
-    <div className="relative">
-      <input 
-        type={show ? "text" : "password"}
-        required
-        className="block w-full rounded-lg border border-gray-300 py-2 pl-3 pr-10 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 text-gray-900 bg-white"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-      />
-      <button 
-        type="button"
-        onClick={toggle}
-        className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-600 focus:outline-none"
-      >
-        {show ? <EyeOff size={16}/> : <Eye size={16}/>}
-      </button>
-    </div>
-  </div>
-);
-
-const ReadOnlyItem = ({ icon, label, value }) => (
-  <div>
-    <label className="text-xs font-medium text-gray-500 uppercase tracking-wider flex items-center gap-2 mb-1">
-      {React.cloneElement(icon, { size: 14, className: "text-gray-400" })}
-      {label}
-    </label>
-    <div className="text-sm font-medium text-gray-900 bg-gray-50 px-3 py-2 rounded-lg border border-gray-100">
-      {value || <span className="text-gray-400 italic">Not available</span>}
-    </div>
-  </div>
-);
 
 export default StudentProfile;

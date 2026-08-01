@@ -1,136 +1,79 @@
-import { createContext, useContext, useState, useEffect, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
-import toast from "react-hot-toast";
+import React, { createContext, useContext, useState, useEffect } from "react";
 import axios from "axios";
 
 export const AppContext = createContext();
 
-// ✅ Global Config
-axios.defaults.withCredentials = true;
-const backendUrl = import.meta.env.VITE_API_URL || "http://localhost:5000";
-axios.defaults.baseURL = backendUrl;
+export const AppProvider = ({ children }) => {
+  const [user, setUser] = useState(null);
+  const [role, setRole] = useState(sessionStorage.getItem("role") || null);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-export const AppContextProvider = ({ children }) => {
-  const navigate = useNavigate();
+  const backendUrl = import.meta.env.VITE_API_BASE_URL || "http://localhost:6446";
 
-  const [user, setUser] = useState({ token: null, role: null });
-  const [authReady, setAuthReady] = useState(false);
-  
-  // ✅ STATE FOR ADMIN & FACULTY
-  const [adminInfo, setAdminInfo] = useState(null);
-  const [facultyInfo, setFacultyInfo] = useState(null); // <--- ADDED THIS
-  const [studentInfo, setStudentInfo] = useState(null);
+  axios.defaults.withCredentials = true;
 
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [profileOpen, setProfileOpen] = useState(false);
-
-  // ✅ 1. Check Auth (Updated to handle Faculty)
-const checkAuth = useCallback(async () => {
-  try {
-    const role = sessionStorage.getItem("role");
+  const checkAuth = async () => {
+    const storedRole = sessionStorage.getItem("role");
     
-    // 1. CRITICAL: Clear all previous user data immediately 
-    // to prevent "leaking" data between sessions
-    setAdminInfo(null);
-    setFacultyInfo(null);
-    setStudentInfo(null);
-
-    if (!role) {
-      setUser({ token: null, role: null }); // Reset user state too
-      setAuthReady(true);
+    if (!storedRole) {
+      setIsAuthenticated(false);
+      setUser(null);
+      setRole(null);
+      setLoading(false);
       return;
     }
 
-    const { data } = await axios.get(`/api/${role}/is-auth`);
+    try {
+      const endpoint = storedRole.toLowerCase();
+      const { data } = await axios.get(`${backendUrl}/api/${endpoint}/is-auth`);
 
-    if (data.success) {
-      setUser({ token: "cookie-auth", role });
-      
-      // 2. Set only the relevant info for the current role
-      if (role === "admin" && data.admin) {
-        setAdminInfo(data.admin);
-      } else if (role === "faculty" && data.faculty) {
-        setFacultyInfo(data.faculty);
-      } else if (role === "student" && data.student) {
-        // Ensure student info is also handled if your API returns it
-        setStudentInfo(data.student);
+      if (data.success) {
+        setIsAuthenticated(true);
+        setRole(storedRole.toUpperCase());
+        setUser(data.admin || data.teacher || data.student);
+      } else {
+        throw new Error("Authentication failed");
       }
-
-    } else {
-      setUser({ token: null, role: null });
+    } catch (error) {
+      setIsAuthenticated(false);
+      setUser(null);
+      setRole(null);
       sessionStorage.removeItem("role");
+    } finally {
+      setLoading(false);
     }
-  } catch (error) {
-    console.error("Auth check error:", error);
-    setUser({ token: null, role: null });
-    // Clear everything on error for security
-    setAdminInfo(null);
-    setFacultyInfo(null);
-    setStudentInfo(null);
-  } finally {
-    setAuthReady(true);
-  }
-}, []);
-
-  // ✅ 2. Run checkAuth on mount
-  useEffect(() => {
-    checkAuth();
-  }, [checkAuth]);
-
-  // ✅ Manual login helper (Updated)
-  const login = (role, token, data = null) => {
-    sessionStorage.setItem("role", role);
-    setUser({ token, role });
-    
-    if (role === "admin" && data) setAdminInfo(data);
-    if (role === "faculty" && data) setFacultyInfo(data); // <--- Added
-    
-    setAuthReady(true);
   };
 
   const logout = async () => {
-    const role = sessionStorage.getItem("role");
     try {
-      if(role) await axios.post(`/api/${role}/logout`);
+      if (role) {
+        await axios.post(`${backendUrl}/api/${role.toLowerCase()}/logout`);
+      }
     } catch (error) {
       console.error(error);
     } finally {
-      sessionStorage.clear();
-      setUser({ token: null, role: null });
-      setAdminInfo(null);
-      setFacultyInfo(null); // <--- Clear faculty info
-      toast.success("Logged out");
-      navigate("/");
+      sessionStorage.removeItem("role");
+      setIsAuthenticated(false);
+      setUser(null);
+      setRole(null);
     }
   };
+
+  useEffect(() => {
+    checkAuth();
+  }, []);
 
   return (
     <AppContext.Provider
       value={{
         user,
-        authReady,
+        role,
+        isAuthenticated,
+        loading,
         checkAuth,
-        login,
         logout,
-        sidebarOpen,
-        setSidebarOpen,
-        profileOpen,
-        setProfileOpen,
-        
-        // Admin
-        adminInfo,
-        setAdminInfo,
-        
-        // ✅ Faculty (Exported!)
-        facultyInfo,
-        setFacultyInfo,
-        
-        // Student
-        studentInfo,
-        setStudentInfo,
-
-        axios,
-        backendUrl
+        backendUrl,
       }}
     >
       {children}

@@ -1,21 +1,15 @@
-import Report from '../models/Report.js';
+import Report from '../models/Report.js'; // 🏫 Assumes Report model matches our earlier schema
 import { v2 as cloudinary } from 'cloudinary';
-import path from 'path';
 
 // Helper: Upload Buffer to Cloudinary
 const uploadStream = (file) => {
   return new Promise((resolve, reject) => {
-    const ext = path.extname(file.originalname).toLowerCase();
-    const name = path.basename(file.originalname, ext);
-
     const stream = cloudinary.uploader.upload_stream(
       { 
-        resource_type: 'raw',       
-        folder: 'reports',          
-        public_id: name + ext,      
+        resource_type: 'auto',       
+        folder: 'saints_reports',          
         use_filename: true,
-        unique_filename: false,     
-        format: ext.replace('.', '') 
+        unique_filename: true,    
       }, 
       (err, result) => {
         if (err) return reject(err);
@@ -28,24 +22,24 @@ const uploadStream = (file) => {
 
 export const createReport = async (req, res) => {
   try {
-    const { title, type, fileUrl, generatedBy, sentTo } = req.body;
+    const { title, type, fileUrl, sentTo, targetGrade, targetSection } = req.body;
     let fileData = {};
 
-    // ✅ VALIDATION: Define Allowed MIME Types
     const allowedMimeTypes = [
-      'application/pdf',                                                          // .pdf
-      'application/msword',                                                       // .doc
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // .docx
-      'application/vnd.ms-excel',                                                 // .xls
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'       // .xlsx
+      'application/pdf',                                                        
+      'application/msword',                                                     
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/vnd.ms-excel',                                               
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',      
+      'image/jpeg',                                                             
+      'image/png'                                                               
     ];
 
     if (req.file) {
-      // ✅ CHECK: Reject if not in allowed list
       if (!allowedMimeTypes.includes(req.file.mimetype)) {
         return res.status(400).json({ 
           success: false, 
-          message: "Invalid file type. Only PDF, Word, and Excel files are allowed." 
+          message: "Invalid file type. Only PDF, Word, Excel, JPG, and PNG are allowed." 
         });
       }
 
@@ -66,13 +60,35 @@ export const createReport = async (req, res) => {
       return res.status(400).json({ success: false, message: "File or URL is required." });
     }
 
+    const currentUserId = req.admin?._id || req.teacher?._id;
+    const userRole = req.admin ? 'Admin' : req.teacher ? 'Teacher' : 'System';
+    const userName = req.admin?.name || req.teacher?.name || 'Auto';
+
+    if (!currentUserId) {
+      return res.status(401).json({ success: false, message: "Unauthorized. User ID missing."});
+    }
+
+    // 🚨 THE FIX: Convert "All" into 'null' so Mongoose doesn't trigger an Enum error
+    let finalGrade = targetGrade === 'All' ? null : (targetGrade || null);
+    let finalSection = targetSection === 'All' ? null : (targetSection || null);
+
+    // If grade is null (meaning All Classes), forcefully nullify the section too
+    if (!finalGrade) {
+      finalSection = null;
+    }
+
     const newReport = await Report.create({
       title,
       type,
       file: fileData,
-      // Ensure sentTo is saved correctly from the frontend
       sentTo: sentTo || 'All', 
-      generatedBy: generatedBy ? JSON.parse(generatedBy) : { role: 'System', name: 'Auto' },
+      targetGrade: finalGrade,     
+      targetSection: finalSection, 
+      generatedBy: { 
+        userId: currentUserId, 
+        role: userRole, 
+        name: userName 
+      },
       status: 'Completed'
     });
 
@@ -84,43 +100,57 @@ export const createReport = async (req, res) => {
   }
 };
 
-export const getAdminReports = async (req, res) => {
+/* ============================
+   GET REPORTS (Inbox vs Sent)
+============================ */
+export const getReports = async (req, res) => {
   try {
-    const reports = await Report.find({ 'generatedBy.role': 'Admin' }).sort({ createdAt: -1 });
+    const { tab } = req.query;
+    
+    // ✅ CRITICAL FIX: Extract current ID based on auth type
+    const currentUserId = req.admin?._id || req.teacher?._id || req.student?._id;
+    const currentUserRole = req.admin ? 'Admin' : req.teacher ? 'Teacher' : req.student ? 'Student' : '';
+    
+    let query = {};
+
+    if (tab === 'sent') {
+      query = { 'generatedBy.userId': currentUserId };
+    } else {
+      query = {
+        'generatedBy.userId': { $ne: currentUserId }, 
+        $or: [
+          { sentTo: 'All' },
+          { sentTo: currentUserRole }, 
+          { sentTo: currentUserId } 
+        ]
+      };
+
+      if (currentUserRole === 'Student' && req.student) {
+        query.$or.push({ 
+          sentTo: 'Student', 
+          targetGrade: req.student.grade, 
+          targetSection: req.student.section 
+        });
+      }
+    }
+
+    const reports = await Report.find(query).sort({ createdAt: -1 }).lean();
     res.status(200).json({ success: true, count: reports.length, data: reports });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
 };
 
-export const getFacultyReports = async (req, res) => {
-  try {
-    const reports = await Report.find({ 'generatedBy.role': 'Faculty' }).sort({ createdAt: -1 });
-    res.status(200).json({ success: true, count: reports.length, data: reports });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-};
-
-export const getSystemReports = async (req, res) => {
-  try {
-    const reports = await Report.find({ 'generatedBy.role': 'System' }).sort({ createdAt: -1 });
-    res.status(200).json({ success: true, count: reports.length, data: reports });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-};
-
+/* ============================
+   DELETE REPORT BY ID
+============================ */
 export const deleteReportById = async (req, res) => {
   try {
     const { id } = req.params;
-    // Read from query (from frontend update) or body (fallback)
-    const userId = req.query.userId || req.body.userId; 
-    const role = req.query.role || req.body.role;
-
-    if (!userId) {
-      return res.status(400).json({ success: false, message: "User ID is required." });
-    }
+    
+    // ✅ CRITICAL FIX: Extract current ID safely
+    const currentUserId = req.admin?._id || req.teacher?._id;
+    const isAdmin = !!req.admin;
 
     const report = await Report.findById(id);
     if (!report) {
@@ -129,9 +159,7 @@ export const deleteReportById = async (req, res) => {
 
     const reportOwnerId = report.generatedBy?.userId;
 
-    // SECURITY LOGIC
-    const isOwner = reportOwnerId && reportOwnerId.toString() === userId.toString();
-    const isAdmin = role === 'admin' || role === 'Admin';
+    const isOwner = reportOwnerId && reportOwnerId.toString() === currentUserId?.toString();
 
     if (!isOwner && !isAdmin) {
       return res.status(403).json({ 
@@ -140,12 +168,10 @@ export const deleteReportById = async (req, res) => {
       });
     }
 
-    // Delete from Cloudinary
     if (report.file && report.file.publicId) {
-      await cloudinary.uploader.destroy(report.file.publicId, { resource_type: 'raw' });
+      await cloudinary.uploader.destroy(report.file.publicId);
     }
 
-    // Delete from MongoDB
     await Report.findByIdAndDelete(id);
     res.status(200).json({ success: true, message: "Report deleted successfully" });
   } catch (error) {
@@ -154,36 +180,41 @@ export const deleteReportById = async (req, res) => {
   }
 };
 
-// --- FIX IS HERE: Unified Fetching Logic for Inbox vs Sent ---
-export const getReports = async (req, res) => {
+/* ... Keep your other role-based fetching routes the same ... */
+
+/* ============================
+   ROLE-BASED FETCHING (Admin View)
+============================ */
+export const getAdminReports = async (req, res) => {
   try {
-    const { tab, userId, role } = req.query;
-    let query = {};
-
-    if (tab === 'sent') {
-      // 1. "Sent by Me": Reports where I am the author
-      query = { 'generatedBy.userId': userId };
-    } else {
-      // 2. "Inbox (Received)"
-      const formattedRole = role ? role.charAt(0).toUpperCase() + role.slice(1).toLowerCase() : '';
-
-      query = {
-        'generatedBy.userId': { $ne: userId }, // Don't show me reports I sent
-        $or: [
-          { sentTo: 'All' },
-          { sentTo: formattedRole }, 
-          { sentTo: userId } // ✅ NEW: Match if it was sent DIRECTLY to my specific ID!
-        ]
-      };
-    }
-
-    const reports = await Report.find(query).sort({ createdAt: -1 });
-    res.status(200).json({ success: true, data: reports });
+    const reports = await Report.find({ 'generatedBy.role': 'Admin' }).sort({ createdAt: -1 }).lean();
+    res.status(200).json({ success: true, count: reports.length, data: reports });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
 };
 
+export const getTeacherReports = async (req, res) => {
+  try {
+    const reports = await Report.find({ 'generatedBy.role': 'Teacher' }).sort({ createdAt: -1 }).lean();
+    res.status(200).json({ success: true, count: reports.length, data: reports });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const getSystemReports = async (req, res) => {
+  try {
+    const reports = await Report.find({ 'generatedBy.role': 'System' }).sort({ createdAt: -1 }).lean();
+    res.status(200).json({ success: true, count: reports.length, data: reports });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+/* ============================
+   BULK DELETION (Admin Only)
+============================ */
 export const deleteAdminReports = async (req, res) => {
   try {
     const result = await Report.deleteMany({ 'generatedBy.role': 'Admin' });
@@ -193,10 +224,10 @@ export const deleteAdminReports = async (req, res) => {
   }
 };
 
-export const deleteFacultyReports = async (req, res) => {
+export const deleteTeacherReports = async (req, res) => {
   try {
-    const result = await Report.deleteMany({ 'generatedBy.role': 'Faculty' });
-    res.status(200).json({ success: true, message: `Deleted ${result.deletedCount} Faculty reports` });
+    const result = await Report.deleteMany({ 'generatedBy.role': 'Teacher' });
+    res.status(200).json({ success: true, message: `Deleted ${result.deletedCount} Teacher reports` });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }

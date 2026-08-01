@@ -1,214 +1,159 @@
-import React, { useEffect, useState } from 'react';
-import { Calendar, Clock, MapPin, Phone, Mail, Coffee, Loader2 } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
+import { 
+  FiCalendar, FiClock, FiMapPin, FiUser, FiInfo 
+} from 'react-icons/fi';
+import { useAppContext } from '../../context/AppContext';
 
 const StudentSchedule = () => {
-  const [schedule, setSchedule] = useState(null);
+  const { backendUrl } = useAppContext();
+  
   const [loading, setLoading] = useState(true);
-  const [activeDay, setActiveDay] = useState(new Date().toLocaleDateString('en-US', { weekday: 'long' }));
-  
-  const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-  
-  // Helper to determine if a class is currently active
-  const isClassNow = (timeStr) => {
-    if (!timeStr || !timeStr.includes('-')) return false;
+  const [schedule, setSchedule] = useState(null);
+  const [activeDay, setActiveDay] = useState('Monday');
 
-    const [startStr, endStr] = timeStr.split('-').map(s => s.trim());
-    
-    const convertToMinutes = (str) => {
-      const [time, modifier] = str.split(' ');
-      let [hours, minutes] = time.split(':').map(Number);
-      if (hours === 12) hours = 0;
-      if (modifier === 'PM') hours += 12;
-      return hours * 60 + minutes;
-    };
-
-    const now = new Date();
-    // Only check "Live" if the active tab is today's actual day
-    const currentDayName = now.toLocaleDateString('en-US', { weekday: 'long' });
-    if (activeDay !== currentDayName) return false;
-
-    const currentMinutes = now.getHours() * 60 + now.getMinutes();
-    
-    try {
-      const start = convertToMinutes(startStr);
-      const end = convertToMinutes(endStr);
-      return currentMinutes >= start && currentMinutes <= end;
-    } catch (e) {
-      return false;
+  // Determine today's day to set the default active tab
+  useEffect(() => {
+    const today = new Date().toLocaleDateString('en-US', { weekday: 'long' });
+    if (["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"].includes(today)) {
+      setActiveDay(today);
     }
-  };
+  }, []);
 
   useEffect(() => {
     const fetchSchedule = async () => {
       try {
-        const { data } = await axios.get('/api/student/full-schedule', { withCredentials: true });
+        const { data } = await axios.get(`${backendUrl}/api/student/schedule`, { 
+          withCredentials: true 
+        });
+        
         if (data.success) {
           setSchedule(data.schedule);
-          if (activeDay === "Sunday") setActiveDay("Monday");
         }
-      } catch (err) {
-        toast.error("Failed to fetch detailed timetable");
+      } catch (error) {
+        toast.error("Failed to load your timetable.");
       } finally {
         setLoading(false);
       }
     };
+
     fetchSchedule();
-  }, [activeDay]);
+  }, [backendUrl]);
 
   if (loading) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50/50 text-indigo-600 space-y-4">
-        <Loader2 className="w-8 h-8 animate-spin" />
-        <p className="font-medium text-gray-500">Syncing your timetable...</p>
+      <div className="flex-1 flex flex-col items-center justify-center h-[80vh]">
+        <div className="w-10 h-10 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mb-4"></div>
+        <p className="text-slate-500 font-bold animate-pulse">Loading your timetable...</p>
       </div>
     );
   }
 
-  const currentDayClasses = schedule?.[activeDay] || [];
+  const daysOfWeek = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  const activePeriods = schedule ? schedule[activeDay] : [];
 
   return (
-    <div className="min-h-screen bg-gray-50/50 p-4 md:p-8 font-sans animate-in fade-in duration-500">
-      <div className="max-w-7xl mx-auto space-y-8">
+    <div className="p-4 md:p-8 w-full max-w-6xl mx-auto animate-fade-in font-sans pb-12 mt-4">
+
+      {/* Days Navigation Tabs */}
+      <div className="flex overflow-x-auto custom-scrollbar gap-2 mb-8 pb-2">
+        {daysOfWeek.map((day) => (
+          <button
+            key={day}
+            onClick={() => setActiveDay(day)}
+            className={`px-6 py-3 rounded-xl font-bold whitespace-nowrap transition-all duration-200 ${
+              activeDay === day 
+                ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30 transform scale-[1.02]' 
+                : 'bg-white border border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-indigo-600'
+            }`}
+          >
+            {day}
+          </button>
+        ))}
+      </div>
+
+      {/* Timetable Content */}
+      <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden animate-slide-up">
         
-        {/* HEADER & DAY SELECTOR */}
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+        {/* Day Header Banner */}
+        <div className="bg-slate-50 border-b border-slate-200 p-6 flex justify-between items-center">
           <div>
-            <h1 className="text-2xl md:text-3xl font-bold text-gray-900 tracking-tight flex items-center gap-3">
-              <Calendar className="text-indigo-600" size={28} /> Weekly Schedule
-            </h1>
-            <p className="mt-1.5 text-gray-500 font-medium">Detailed period-wise breakdown with faculty contacts.</p>
-          </div>
-          
-          {/* Professional Segmented Control for Days */}
-          <div className="flex bg-gray-200/60 p-1.5 rounded-xl overflow-x-auto border border-gray-200/50 shadow-inner w-full lg:w-auto custom-scrollbar-hide">
-            {days.map(day => {
-              const isActive = activeDay === day;
-              return (
-                <button
-                  key={day}
-                  onClick={() => setActiveDay(day)}
-                  className={`flex-1 lg:flex-none px-5 py-2.5 text-sm font-semibold rounded-lg transition-all whitespace-nowrap ${
-                    isActive 
-                      ? 'bg-white text-indigo-700 shadow-sm border border-gray-100' 
-                      : 'text-gray-500 hover:text-gray-900 hover:bg-gray-100/50'
-                  }`}
-                >
-                  {day.substring(0, 3)}
-                </button>
-              );
-            })}
+            <h2 className="text-xl font-black text-slate-800">{activeDay}'s Schedule</h2>
+            <p className="text-sm font-medium text-slate-500 mt-0.5">
+              {activePeriods.length} Classes Scheduled
+            </p>
           </div>
         </div>
 
-        {/* CONTENT AREA */}
-        {currentDayClasses.length === 0 ? (
-          <div className="bg-white rounded-3xl py-20 text-center border border-dashed border-gray-200 shadow-sm">
-            <div className="w-16 h-16 bg-gray-50 text-gray-400 rounded-full flex items-center justify-center mx-auto mb-5 shadow-inner">
-               <Coffee size={32} />
+        {activePeriods.length === 0 ? (
+          <div className="p-16 text-center">
+            <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-300">
+              <FiCalendar size={32} />
             </div>
-            <h3 className="text-xl font-bold text-gray-900">No Academic Sessions</h3>
-            <p className="text-gray-500 mt-2 font-medium">You have a free day on {activeDay}. Take some time to rest!</p>
+            <h3 className="text-xl font-bold text-slate-600 mb-2">No Classes Today</h3>
+            <p className="text-slate-400 font-medium max-w-md mx-auto">
+              There are no classes scheduled for {activeDay}. Enjoy your free time or utilize it for self-study.
+            </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {currentDayClasses.map((cls, idx) => {
-              const timeString = cls.time ? cls.time : `${cls.startTime} - ${cls.endTime}`;
-              const isLive = isClassNow(timeString);
-
-              return (
-                <div 
-                  key={idx} 
-                  className={`relative bg-white rounded-2xl p-5 md:p-6 transition-all flex flex-col h-full group ${
-                    isLive 
-                      ? 'border-indigo-500 ring-1 ring-indigo-500 shadow-md bg-indigo-50/10' 
-                      : 'border border-gray-200 shadow-sm hover:shadow-md hover:border-gray-300'
-                  }`}
-                >
-                  
-                  {/* Top Section: Time & Badges */}
-                  <div className="flex justify-between items-start mb-4">
-                    <div className={`flex items-center gap-2 font-semibold ${isLive ? 'text-indigo-700' : 'text-gray-600'}`}>
-                      <Clock size={18} className={isLive ? "text-indigo-600" : "text-gray-400"} />
-                      <span>{timeString}</span>
-                    </div>
-                    
-                    <div className="flex gap-2">
-                      {isLive && (
-                        <span className="flex items-center gap-1.5 bg-indigo-100 text-indigo-700 text-xs font-bold px-2.5 py-1 rounded-md uppercase tracking-wide">
-                          <span className="w-1.5 h-1.5 bg-indigo-600 rounded-full animate-pulse"></span>
-                          Live
-                        </span>
-                      )}
-                      {cls.type === 'Lab' && (
-                        <span className="bg-purple-50 text-purple-700 text-xs font-bold px-2.5 py-1 rounded-md border border-purple-100 uppercase tracking-wide">
-                          Lab
-                        </span>
-                      )}
-                    </div>
+          <div className="p-4 md:p-6 space-y-4">
+            {activePeriods.map((period, index) => (
+              <div 
+                key={period._id || index} 
+                className="flex flex-col md:flex-row bg-white border border-slate-100 hover:border-indigo-200 hover:shadow-md rounded-2xl p-5 gap-6 transition-all group"
+              >
+                {/* Time & Period Badge */}
+                <div className="md:w-48 flex flex-row md:flex-col justify-between md:justify-center items-center md:items-start shrink-0 md:border-r border-slate-100 pr-6">
+                  <div>
+                    <span className="bg-indigo-50 text-indigo-700 text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-md mb-2 inline-block">
+                      Period {period.periodIndex}
+                    </span>
+                    <h3 className="text-lg font-black text-slate-800">{period.time.split(' - ')[0]}</h3>
+                    <p className="text-sm font-bold text-slate-400 mt-1 flex items-center gap-1.5">
+                      <FiClock size={14} /> to {period.time.split(' - ')[1]}
+                    </p>
                   </div>
-
-                  {/* Body: Subject & Location */}
-                  <div className="flex-grow mb-6">
-                    <h3 className={`text-xl font-bold leading-tight mb-2 line-clamp-2 ${isLive ? 'text-indigo-950' : 'text-gray-900'}`}>
-                      {cls.subject}
-                    </h3>
-                    <div className="flex items-center gap-2 text-sm text-gray-500 font-medium">
-                      <MapPin size={16} className="text-gray-400 shrink-0" />
-                      <span className="truncate">Room: {cls.room}</span>
-                    </div>
-                  </div>
-
-                  {/* Footer: Faculty Profile */}
-                  <div className="pt-4 border-t border-gray-100 flex items-center justify-between mt-auto">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <img 
-                        src={cls.facultyImage || `https://ui-avatars.com/api/?name=${encodeURIComponent(cls.facultyName || 'Faculty')}&background=f3f4f6&color=4b5563&font-size=0.33`} 
-                        className="h-10 w-10 rounded-xl object-cover border border-gray-200 shrink-0"
-                        alt={cls.facultyName}
-                      />
-                      <div className="min-w-0">
-                        <p className="text-sm font-semibold text-gray-900 truncate">{cls.facultyName || 'TBA'}</p>
-                        <p className="text-xs text-gray-500 font-medium truncate">Instructor</p>
-                      </div>
-                    </div>
-                    
-                    {/* Actions */}
-                    <div className="flex gap-1.5 shrink-0 ml-2">
-                      {cls.facultyPhone && (
-                        <a 
-                          href={`tel:${cls.facultyPhone}`} 
-                          className="p-2.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-colors"
-                          title="Call Instructor"
-                        >
-                          <Phone size={18} />
-                        </a>
-                      )}
-                      {cls.facultyEmail && (
-                        <a 
-                          href={`mailto:${cls.facultyEmail}`} 
-                          className="p-2.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-colors"
-                          title="Email Instructor"
-                        >
-                          <Mail size={18} />
-                        </a>
-                      )}
-                    </div>
-                  </div>
-
                 </div>
-              );
-            })}
+
+                {/* Subject Details */}
+                <div className="flex-1">
+                  <h2 className="text-2xl font-black text-slate-800 mb-2 group-hover:text-indigo-600 transition-colors">
+                    {period.subject}
+                  </h2>
+                  <div className="flex flex-wrap items-center gap-4 text-sm font-medium text-slate-500">
+                    <span className="flex items-center gap-1.5 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100">
+                      <FiMapPin className="text-slate-400" /> Room {period.room}
+                    </span>
+                    {period.subject.toLowerCase().includes('lab') && (
+                      <span className="flex items-center gap-1.5 bg-amber-50 text-amber-700 px-3 py-1.5 rounded-lg border border-amber-100">
+                        <FiInfo size={14} /> Practical Session
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Teacher Details */}
+                <div className="md:w-64 flex items-center gap-4 shrink-0 bg-slate-50 p-3 rounded-xl border border-slate-100">
+                  <div className="w-12 h-12 rounded-full bg-slate-200 border border-white shadow-sm flex items-center justify-center overflow-hidden shrink-0">
+                    {period.teacherImage ? (
+                      <img src={period.teacherImage} alt={period.teacherName} className="w-full h-full object-cover" />
+                    ) : (
+                      <FiUser className="text-slate-400" size={20} />
+                    )}
+                  </div>
+                  <div className="overflow-hidden">
+                    <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-0.5">Instructor</p>
+                    <p className="font-bold text-slate-800 truncate">{period.teacherName}</p>
+                  </div>
+                </div>
+                
+              </div>
+            ))}
           </div>
         )}
       </div>
-      
-      {/* Inline CSS to hide scrollbar on the day selector for cleaner look */}
-      <style dangerouslySetInnerHTML={{__html: `
-        .custom-scrollbar-hide::-webkit-scrollbar { display: none; }
-        .custom-scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
-      `}} />
+
     </div>
   );
 };

@@ -1,284 +1,320 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
+import toast from 'react-hot-toast';
 import { 
-  FileText, Download, Trash2, Plus, 
-  CheckCircle, AlertCircle, X, 
-  FileSpreadsheet, Send
-} from 'lucide-react';
+  FiFileText, FiUploadCloud, FiTrash2, FiDownload, 
+  FiEye, FiAlertTriangle, FiFile, FiUsers, FiFilter
+} from 'react-icons/fi';
 import { useAppContext } from '../../context/AppContext';
-import { toast } from 'react-hot-toast';
 
 const AdminReports = () => {
-  // Make sure your user object contains _id, role, and name
-  const { axios, user: authUser, adminInfo } = useAppContext();
-  const user = {
-    _id: adminInfo?._id,
-    name: adminInfo?.name,
-    role: authUser?.role
-  };
-
+  const { backendUrl } = useAppContext();
+  
   const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('received'); // 'received' or 'sent'
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [selectedReportId, setSelectedReportId] = useState(null);
-
-  const [uploadMode, setUploadMode] = useState('device'); 
+  const [uploading, setUploading] = useState(false);
+  const [deleteModal, setDeleteModal] = useState({ isOpen: false, reportId: null });
+  const [file, setFile] = useState(null);
+  
   const [formData, setFormData] = useState({
     title: '',
-    type: 'ATTENDANCE_SHEET',
-    sentTo: 'All', // New field for RBAC
-    fileUrl: '', 
-    selectedFile: null
+    type: 'NOTICE', // Changed default to NOTICE
+    sentTo: 'All',
+    targetGrade: '',
+    targetSection: 'All' // Default section to 'All'
   });
 
-const fetchReports = async () => {
-    if (!user._id) return; 
-    
+  const API_BASE = `${backendUrl}/api/reports`;
+
+  const fetchReports = async () => {
     setLoading(true);
     try {
-      // ✅ FIX: Added '/all' to match your backend router
-      const res = await axios.get(`/api/reports/all`, {
-        params: { tab: activeTab, userId: user._id, role: user.role }
+      const { data } = await axios.get(`${API_BASE}/admin`, {
+        withCredentials: true
       });
-      if (res.data.success) {
-        setReports(res.data.data);
+      if (data.success) {
+        setReports(data.data); 
       }
-    } catch (err) {
-      // Log the actual error to the console so you can see it next time!
-      console.error("Fetch Error:", err.response?.data || err.message);
-      setReports([]);
-      toast.error("Failed to fetch reports");
+    } catch (error) {
+      toast.error("Failed to load uploaded reports.");
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    if (user._id) {
-      fetchReports();
-    }
-    // ✅ THE FIX: Watch the specific strings (_id and role), NOT the whole 'user' object
-  }, [activeTab, user._id, user.role]);
+    fetchReports();
+    // eslint-disable-next-line
+  }, []);
 
-  const handleCreateSubmit = async (e) => {
-    e.preventDefault();
-    if (!formData.title) return toast.error("Report Title is required");
-
-    const loadingToast = toast.loading("Uploading Report...");
-
-    try {
-      const data = new FormData();
-      data.append('title', formData.title);
-      data.append('type', formData.type);
-      data.append('sentTo', formData.sentTo); 
-      
-      // Pass complete user info ensuring userId is included
-      const userInfo = { role: user.role, name: user.name, userId: user._id }; 
-      data.append('generatedBy', JSON.stringify(userInfo));
-
-      if (uploadMode === 'device') {
-        if (!formData.selectedFile) throw new Error("Please select a file");
-        data.append('file', formData.selectedFile);
-      } else {
-        if (!formData.fileUrl) throw new Error("Please enter a URL");
-        data.append('fileUrl', formData.fileUrl);
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => {
+      const updated = { ...prev, [name]: value };
+      // Auto-reset section if "All Classes" is selected
+      if (name === 'targetGrade' && value === 'All') {
+        updated.targetSection = 'All';
       }
-
-      const res = await axios.post('/api/reports/create', data);
-      
-      if (res.data.success) {
-        toast.success("Report Uploaded Successfully!", { id: loadingToast });
-        setShowCreateModal(false);
-        setFormData({ title: '', type: 'ATTENDANCE_SHEET', sentTo: 'All', fileUrl: '', selectedFile: null });
-        fetchReports(); // Refresh list
-      }
-    } catch (err) {
-      toast.error(err.message || err.response?.data?.message || "Upload failed", { id: loadingToast });
-    }
+      return updated;
+    });
   };
 
   const handleFileChange = (e) => {
     if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
-      const validExtensions = ['pdf', 'doc', 'docx', 'xls', 'xlsx'];
-      const fileExtension = file.name.split('.').pop().toLowerCase();
-
-      if (!validExtensions.includes(fileExtension)) {
-        toast.error("Invalid file type! Only PDF, Word, and Excel allowed.");
+      const selectedFile = e.target.files[0];
+      if (selectedFile.size > 5 * 1024 * 1024) {
+        toast.error("File size must be less than 5MB");
         e.target.value = null; 
         return;
       }
-      if (file.size > 10 * 1024 * 1024) {
-        toast.error("File is too large! (Max 10MB)");
-        return;
-      }
-      setFormData({ ...formData, selectedFile: file, fileUrl: '' });
+      setFile(selectedFile);
     }
   };
 
-  const confirmDelete = async () => {
-    if (!selectedReportId) return;
-    try {
-      // ✅ FIX: Send userId and role as URL query parameters for safe DELETE requests
-      await axios.delete(`/api/reports/${selectedReportId}?userId=${user._id}&role=${user.role}`);
-      
-      setReports(reports.filter(r => r._id !== selectedReportId));
-      setShowDeleteModal(false);
-      toast.success("Report deleted successfully");
-    } catch (err) { 
-      toast.error(err.response?.data?.message || "Failed to delete"); 
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!file) return toast.error("Please select a file to upload.");
+
+    setUploading(true);
+
+    const uploadData = new FormData();
+    uploadData.append('title', formData.title);
+    uploadData.append('type', formData.type);
+    uploadData.append('sentTo', formData.sentTo);
+    uploadData.append('file', file);
+    
+    if (formData.sentTo === 'Student') {
+      uploadData.append('targetGrade', formData.targetGrade);
+      uploadData.append('targetSection', formData.targetSection);
     }
+
+    try {
+      const { data } = await axios.post(`${API_BASE}/create`, uploadData, {
+        withCredentials: true,
+        headers: { 'Content-Type': 'multipart/form-data' } 
+      });
+
+      if (data.success) {
+        toast.success("Report uploaded and distributed successfully!");
+        setFormData({ title: '', type: 'NOTICE', sentTo: 'All', targetGrade: '', targetSection: 'All' });
+        setFile(null);
+        document.getElementById('file-upload').value = ''; 
+        fetchReports(); 
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to upload report.");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const triggerDelete = (id) => setDeleteModal({ isOpen: true, reportId: id });
+
+  const confirmDelete = async () => {
+    if (!deleteModal.reportId) return;
+    try {
+      const { data } = await axios.delete(`${API_BASE}/${deleteModal.reportId}`, { withCredentials: true });
+      if (data.success) {
+        toast.success("Report deleted successfully.");
+        setReports(reports.filter(r => r._id !== deleteModal.reportId));
+      }
+    } catch (error) {
+      toast.error("Failed to delete report.");
+    } finally {
+      setDeleteModal({ isOpen: false, reportId: null });
+    }
+  };
+
+  const formatDate = (dateString) => new Date(dateString).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  
+  const formatBytes = (bytes) => {
+    if (!bytes) return 'Unknown Size';
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024, sizes = ['Bytes', 'KB', 'MB', 'GB'], i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
   return (
-    <div className="p-6 bg-gray-50 min-h-screen relative">
-      {/* HEADER */}
-      <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
-            <FileText className="text-blue-600" /> Reports Center
-          </h1>
-        </div>
-        <button onClick={() => setShowCreateModal(true)} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 shadow-md transition">
-          <Plus size={18} /> New Report
-        </button>
-      </div>
-
-      {/* TABS - Updated to Received / Sent */}
-      <div className="flex items-center gap-2 mb-6 border-b border-gray-200">
-        {['received', 'sent'].map((tab) => (
-          <button 
-            key={tab} 
-            onClick={() => setActiveTab(tab)} 
-            className={`px-4 py-2 text-sm font-medium capitalize transition-colors relative ${activeTab === tab ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
-          >
-            {tab === 'received' ? 'Inbox (Received)' : 'Sent by Me'}
-          </button>
-        ))}
-      </div>
-
-      {/* CONTENT */}
-      {loading ? (
-        <div className="text-center py-20 text-gray-500 animate-pulse">Loading...</div>
-      ) : reports.length === 0 ? (
-        <div className="text-center py-16 bg-white rounded-xl border border-dashed border-gray-300">
-          <FileSpreadsheet size={48} className="mx-auto text-gray-300 mb-4" />
-          <p className="text-gray-500">No reports found.</p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {reports.map((report) => (
-            <div key={report._id} className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition group flex flex-col h-full">
-              <div className="flex justify-between items-start mb-2">
-                <div className="p-2 bg-blue-50 text-blue-600 rounded-lg"><FileText size={24} /></div>
-                {report.status === 'Completed' 
-                  ? <span className="text-green-600 flex items-center gap-1 text-xs font-medium bg-green-50 px-2 py-1 rounded-full"><CheckCircle size={12} /> Ready</span>
-                  : <span className="text-red-600 flex items-center gap-1 text-xs font-medium bg-red-50 px-2 py-1 rounded-full"><AlertCircle size={12} /> Failed</span>
-                }
-              </div>
-              
-              <h3 className="font-bold text-gray-800 truncate" title={report.title}>{report.title}</h3>
-              <p className="text-xs text-gray-500 mt-1">
-                {activeTab === 'received' 
-                  ? `From: ${report.generatedBy.name} (${report.generatedBy.role})`
-                  : `Sent to: ${report.sentTo}`
-                }
-              </p>
-              <p className="text-xs text-gray-400 mb-4">{new Date(report.createdAt).toLocaleDateString()}</p>
-              
-              <div className="flex items-center gap-3 mt-auto pt-3 border-t border-gray-100">
-                <button onClick={() => window.open(report.file.url, '_blank')} className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 bg-gray-50 rounded-lg hover:bg-gray-100 transition">
-                  <Download size={16} /> Download
-                </button>
-                
-                {/* STRICT UI CHECK: Only show Delete if current user is the sender */}
-                {report.generatedBy.userId === user._id && (
-                  <button onClick={() => { setSelectedReportId(report._id); setShowDeleteModal(true); }} className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition" title="Delete Report">
-                    <Trash2 size={18} />
-                  </button>
-                )}
-              </div>
+    <div className="p-6 md:p-8 w-full max-w-7xl mx-auto animate-fade-in font-sans relative">
+      
+      {deleteModal.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white rounded-3xl p-6 md:p-8 w-full max-w-sm shadow-2xl animate-slide-up">
+            <div className="w-16 h-16 bg-rose-50 rounded-full flex items-center justify-center mx-auto mb-4">
+              <FiAlertTriangle className="text-rose-500 text-3xl" />
             </div>
-          ))}
+            <h3 className="text-xl font-bold text-navy text-center mb-2">Delete Report?</h3>
+            <p className="text-slate-500 text-center font-medium text-sm mb-8">
+              Are you sure you want to delete this document? It will be removed from Cloudinary and users will lose access.
+            </p>
+            <div className="flex gap-3">
+              <button onClick={() => setDeleteModal({ isOpen: false, reportId: null })} className="flex-1 py-3 bg-slate-100 text-slate-600 font-bold rounded-xl hover:bg-slate-200 transition-colors">Cancel</button>
+              <button onClick={confirmDelete} className="flex-1 py-3 bg-rose-600 text-white font-bold rounded-xl hover:bg-rose-700 shadow-lg shadow-rose-600/20 transition-colors">Yes, Delete</button>
+            </div>
+          </div>
         </div>
       )}
 
-      {/* CREATE MODAL */}
-      {showCreateModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-xl font-bold text-gray-900">Upload New Report</h3>
-              <button onClick={() => setShowCreateModal(false)}><X size={20} className="text-gray-400" /></button>
-            </div>
+      <div className="mb-8">
+        <h1 className="text-3xl font-serif font-bold text-navy tracking-tight flex items-center gap-3">
+          <FiFileText className="text-teal-600" /> Document & Reports Hub
+        </h1>
+        <p className="text-slate-500 mt-1 font-medium">Upload, manage, and distribute official school documents.</p>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        
+        <div className="lg:col-span-1">
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-xl p-6 md:p-8 sticky top-6">
+            <h3 className="text-xl font-serif font-bold text-navy border-l-4 border-teal-500 pl-3 mb-6">Upload Document</h3>
             
-            <form onSubmit={handleCreateSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-5">
+              
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Title</label>
-                <input type="text" required className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500" value={formData.title} onChange={(e) => setFormData({...formData, title: e.target.value})} />
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Document File *</label>
+                <div className="relative border-2 border-dashed border-slate-300 rounded-2xl p-6 hover:border-teal-400 bg-slate-50 transition-all text-center group">
+                  <input type="file" id="file-upload" accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg" onChange={handleFileChange} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" />
+                  <FiUploadCloud className={`mx-auto mb-2 text-3xl ${file ? 'text-teal-500' : 'text-slate-400 group-hover:text-teal-400'} transition-colors`} />
+                  <p className="text-sm font-bold text-navy truncate px-2">{file ? file.name : 'Click or drag file to upload'}</p>
+                  <p className="text-xs font-medium text-slate-400 mt-1">PDF, DOC, XLS, JPG (Max 5MB)</p>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Document Title *</label>
+                <input type="text" name="title" required value={formData.title} onChange={handleInputChange} placeholder="e.g. Term 1 Fee Schedule" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 text-navy font-bold" />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">Type</label>
-                  <select className="w-full px-3 py-2 border rounded-lg bg-white" value={formData.type} onChange={(e) => setFormData({...formData, type: e.target.value})}>
-                    <option value="ATTENDANCE_SHEET">Attendance</option>
-                    <option value="FEE_REPORT">Fee Report</option>
-                    <option value="MARKS_CARD">Marks Card</option>
-                  </select>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Doc Type *</label>
+                  <input type="text" name="type" required value={formData.type} onChange={handleInputChange} placeholder="e.g. NOTICE" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 text-navy font-bold uppercase" />
                 </div>
                 <div>
-                  {/* NEW: SENT TO FIELD */}
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">Send To (Role)</label>
-                  <select className="w-full px-3 py-2 border rounded-lg bg-white" value={formData.sentTo} onChange={(e) => setFormData({...formData, sentTo: e.target.value})}>
-                    <option value="All">Everyone</option>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Send To *</label>
+                  <select name="sentTo" value={formData.sentTo} onChange={handleInputChange} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 text-navy font-bold">
+                    <option value="All">All Users</option>
                     <option value="Admin">Admins Only</option>
-                    <option value="Faculty">Faculty Only</option>
-                    <option value="Student">Students Only</option>
+                    <option value="Teacher">Teachers</option>
+                    <option value="Student">Students</option>
                   </select>
                 </div>
               </div>
 
-              <div className="bg-gray-100 p-1 rounded-lg flex text-sm font-medium">
-                <button type="button" onClick={() => setUploadMode('device')} className={`flex-1 py-1.5 rounded-md ${uploadMode === 'device' ? 'bg-white text-blue-600' : 'text-gray-500'}`}>Device</button>
-                <button type="button" onClick={() => setUploadMode('url')} className={`flex-1 py-1.5 rounded-md ${uploadMode === 'url' ? 'bg-white text-blue-600' : 'text-gray-500'}`}>Link</button>
-              </div>
+              {formData.sentTo === 'Student' && (
+                <div className="grid grid-cols-2 gap-4 bg-teal-50/50 p-4 rounded-xl border border-teal-100 animate-fade-in">
+                  <div>
+                    <label className="block text-xs font-bold text-teal-700 uppercase tracking-wider mb-2">Target Class</label>
+                    <select name="targetGrade" required value={formData.targetGrade} onChange={handleInputChange} className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 outline-none focus:border-teal-500 text-navy font-bold">
+                      <option value="">Select</option>
+                      {/* 🚨 ADDED "ALL CLASSES" OPTION */}
+                      <option value="All">All Classes</option>
+                      {["Nursery", "LKG", "UKG", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"].map(g => (
+                        <option key={g} value={g}>Class {g}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-teal-700 uppercase tracking-wider mb-2">Section</label>
+                    <select 
+                      name="targetSection" 
+                      value={formData.targetSection}
+                      onChange={handleInputChange}
+                      disabled={formData.targetGrade === 'All'} // 🚨 DISABLED IF ALL CLASSES SELECTED
+                      className={`w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 outline-none focus:border-teal-500 text-navy font-bold ${formData.targetGrade === 'All' ? 'opacity-50 cursor-not-allowed bg-slate-50' : ''}`}
+                    >
+                      <option value="All">All Sections</option>
+                      {["A", "B", "C", "D"].map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                  </div>
+                </div>
+              )}
 
-              <div className="p-4 border-2 border-dashed border-gray-300 rounded-lg bg-gray-50 text-center">
-                {uploadMode === 'device' ? (
-                  <>
-                    <input type="file" id="file-upload" className="hidden" onChange={handleFileChange} accept=".pdf,.doc,.docx,.xls,.xlsx" />
-                    <label htmlFor="file-upload" className="cursor-pointer flex flex-col items-center justify-center gap-2 text-gray-600 hover:text-blue-600">
-                      {formData.selectedFile ? <span className="text-sm font-medium text-gray-800">{formData.selectedFile.name}</span> : <span className="text-sm font-medium">Click to upload file</span>}
-                    </label>
-                  </>
-                ) : (
-                  <input type="url" required className="w-full px-3 py-2 border rounded bg-white text-sm" placeholder="https://example.com/file.pdf" value={formData.fileUrl} onChange={(e) => setFormData({...formData, fileUrl: e.target.value})} />
-                )}
-              </div>
-
-              <button type="submit" className="w-full py-2.5 rounded-lg text-white font-semibold bg-blue-600 hover:bg-blue-700 transition flex justify-center items-center gap-2">
-                <Send size={18} /> Send Report
+              <button type="submit" disabled={uploading} className="w-full mt-2 py-4 rounded-xl font-bold text-white bg-teal-600 hover:bg-teal-700 shadow-lg shadow-teal-600/30 transition-all flex items-center justify-center gap-2 disabled:opacity-70">
+                {uploading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> : <FiUploadCloud size={20} />}
+                {uploading ? 'Uploading to Cloud...' : 'Upload Document'}
               </button>
             </form>
           </div>
         </div>
-      )}
-      
-      {/* DELETE MODAL */}
-      {showDeleteModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-sm w-full p-6">
-            <h3 className="text-lg font-bold mb-2">Delete Report?</h3>
-            <p className="text-sm text-gray-500 mb-4">This action cannot be undone and will be logged.</p>
-            <div className="flex justify-end gap-3">
-              <button onClick={() => setShowDeleteModal(false)} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition">Cancel</button>
-              <button onClick={confirmDelete} className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition">Yes, Delete</button>
-            </div>
+
+        <div className="lg:col-span-2">
+          <div className="bg-white/80 backdrop-blur-xl border border-slate-200 rounded-3xl p-6 shadow-xl shadow-slate-200/40 h-full">
+            <h3 className="text-xl font-serif font-bold text-navy flex items-center gap-2 mb-6">
+              <FiFile className="text-teal-500" /> Recent Documents
+            </h3>
+            
+            {loading ? (
+              <div className="flex flex-col items-center justify-center h-48 text-teal-500">
+                <div className="w-8 h-8 border-4 border-teal-200 border-t-teal-500 rounded-full animate-spin mb-4"></div>
+                <p className="font-bold text-slate-500">Fetching cloud documents...</p>
+              </div>
+            ) : reports.length === 0 ? (
+              <div className="text-center py-16 text-slate-400 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                <FiFileText size={40} className="mx-auto mb-3 text-slate-300" />
+                <p className="font-bold text-lg text-navy">No Reports Found</p>
+                <p className="text-sm font-medium mt-1">Upload a document to see it here.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {reports.map((report) => (
+                  <div key={report._id} className="bg-white border border-slate-200 rounded-2xl p-5 hover:border-teal-300 hover:shadow-lg transition-all group relative flex flex-col justify-between">
+                    
+                    <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <a href={report.file?.url} target="_blank" rel="noopener noreferrer" className="w-8 h-8 bg-sky-50 text-sky-600 hover:bg-sky-500 hover:text-white rounded-full flex items-center justify-center transition-colors" title="View / Download">
+                        <FiEye size={14} />
+                      </a>
+                      <button onClick={() => triggerDelete(report._id)} className="w-8 h-8 bg-rose-50 text-rose-500 hover:bg-rose-500 hover:text-white rounded-full flex items-center justify-center transition-colors" title="Delete Document">
+                        <FiTrash2 size={14} />
+                      </button>
+                    </div>
+
+                    <div>
+                      <div className="flex items-center gap-2 mb-3">
+                        <span className="text-[10px] font-black bg-teal-100 text-teal-700 px-2.5 py-1 rounded-md tracking-wider">
+                          {report.type}
+                        </span>
+                        <span className="text-[10px] font-black bg-slate-100 text-slate-600 px-2.5 py-1 rounded-md tracking-wider flex items-center gap-1">
+                          <FiUsers /> {report.sentTo}
+                        </span>
+                      </div>
+                      
+                      <h4 className="font-bold text-navy text-lg leading-tight mb-2 pr-16 truncate" title={report.title}>
+                        {report.title}
+                      </h4>
+                      
+                      {/* UI Update to clearly display "All Classes" */}
+                      {report.targetGrade && (
+                        <p className="text-xs font-bold text-indigo-500 flex items-center gap-1 mb-2">
+                          <FiFilter /> 
+                          {report.targetGrade === 'All' 
+                            ? "All Classes" 
+                            : `Class ${report.targetGrade} ${report.targetSection !== 'All' ? `- Sec ${report.targetSection}` : '(All Sections)'}`}
+                        </p>
+                      )}
+                      {/* UI Update to clearly display "All Classes" when values are null */}
+                      {report.sentTo === 'Student' && (
+                        <p className="text-xs font-bold text-indigo-500 flex items-center gap-1 mb-2">
+                          <FiFilter /> 
+                          {!report.targetGrade 
+                            ? "All Classes" 
+                            : `Class ${report.targetGrade} ${!report.targetSection ? '(All Sections)' : `- Sec ${report.targetSection}`}`}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs font-medium text-slate-400">
+                      <span>{formatDate(report.createdAt)}</span>
+                      <span className="uppercase">{report.file?.fileType?.split('/')[1] || 'FILE'} • {formatBytes(report.file?.size)}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
-      )}
+
+      </div>
     </div>
   );
 };

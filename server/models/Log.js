@@ -1,45 +1,24 @@
-import mongoose from 'mongoose';
+import mongoose from "mongoose";
 
 const logSchema = new mongoose.Schema({
-  actionType: { 
-    type: String, 
-    required: true, 
-    uppercase: true, // e.g., 'LOGIN', 'DELETE_USER', 'PAYMENT_FAILED'
-    index: true 
-  },
-  
-  title: { 
-    type: String, 
-    required: true 
-  },
-  
-  message: { 
-    type: String 
-  },
-
-  // The "Actor" (Who performed the action)
+  actionType: { type: String, required: true },
+  title: { type: String, required: true },
+  message: { type: String },
   actor: {
-    userId: { type: mongoose.Schema.Types.ObjectId, refPath: 'actor.role' },
-    role: { 
-      type: String, 
-      required: true,
-      enum: ['Admin', 'Faculty', 'Student', 'System'] 
-    }, 
-    name: String,
-    ipAddress: String
+    userId: { type: mongoose.Schema.Types.ObjectId },
+    role: { type: String },
+    name: { type: String },
+    ipAddress: { type: String },
   },
-
-  metadata: { 
-    type: mongoose.Schema.Types.Mixed, 
-    default: {} 
-  },
-
+  metadata: { type: mongoose.Schema.Types.Mixed },
   status: { 
     type: String, 
     enum: ['Success', 'Failed', 'Warning'], 
     default: 'Success' 
-  }
+  },
+  createdAt: { type: Date, default: Date.now } 
+});
 
-}, { timestamps: true });
+logSchema.index({ createdAt: 1 }, { expireAfterSeconds: 2592000 });
 
-export default mongoose.model('Log', logSchema);
+export default mongoose.model("Log", logSchema);

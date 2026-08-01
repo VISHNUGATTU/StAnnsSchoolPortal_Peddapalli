@@ -1,30 +1,49 @@
 import express from 'express';
-import { 
-  getAdminLogs, 
-  getFacultyLogs, 
-  getStudentLogs, 
-  deleteLogById, 
-  deleteAdminLogs, 
-  deleteFacultyLogs, 
-  deleteStudentLogs,
-  createLog 
-} from '../controllers/logController.js';
-import {facultyAuth} from "../middlewares/authFaculty.js"
+import Log from '../models/Log.js'; 
+import { adminAuth } from '../middlewares/authAdmin.js'; 
+
 const logRouter = express.Router();
 
-logRouter.post('/create', createLog);
+/* ============================
+   GET ALL LOGS
+============================ */
+logRouter.get('/all', adminAuth, async (req, res) => {
+  try {
+    const logs = await Log.find().sort({ createdAt: -1 });
+    res.status(200).json({ success: true, logs });
+  } catch (error) {
+    console.error("Error fetching logs:", error);
+    res.status(500).json({ success: false, message: "Server error fetching logs" });
+  }
+});
 
-// Get Logs
-logRouter.get('/admin', getAdminLogs);
-logRouter.get('/faculty', facultyAuth, getFacultyLogs);
-logRouter.get('/student', getStudentLogs);
+/* ============================
+   CLEAR ALL LOGS (BULK DELETE)
+============================ */
+logRouter.delete('/clear-all', adminAuth, async (req, res) => {
+  try {
+    await Log.deleteMany({});
+    res.status(200).json({ success: true, message: "All audit logs purged successfully" });
+  } catch (error) {
+    console.error("Error clearing logs:", error);
+    res.status(500).json({ success: false, message: "Server error clearing logs" });
+  }
+});
 
-// Delete Logs
-logRouter.delete('/admin', deleteAdminLogs);
-logRouter.delete('/faculty', deleteFacultyLogs);
-logRouter.delete('/student', deleteStudentLogs);
-
-// Delete Single Log (Standardized path)
-logRouter.delete('/:id', deleteLogById); 
+/* ============================
+   DELETE SINGLE LOG
+============================ */
+logRouter.delete('/:id', adminAuth, async (req, res) => {
+  try {
+    const log = await Log.findByIdAndDelete(req.params.id);
+    if (!log) {
+      return res.status(404).json({ success: false, message: "Log entry not found" });
+    }
+    res.status(200).json({ success: true, message: "Log entry deleted" });
+  } catch (error) {
+    console.error("Error deleting log:", error);
+    res.status(500).json({ success: false, message: "Server error deleting log" });
+  }
+});
 
 export default logRouter;

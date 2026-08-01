@@ -1,186 +1,217 @@
-import React, { useEffect, useState } from "react";
-import {
-  FiUser,
-  FiMail,
-  FiPhone,
-  FiShield,
-  FiCalendar,
-  FiEdit3
-} from "react-icons/fi";
-import toast from "react-hot-toast";
-import { useNavigate } from "react-router-dom";
-import { useAppContext } from "../../context/AppContext";
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
+import toast from 'react-hot-toast';
+import { 
+  FiUser, FiSave, FiMail, FiPhone, 
+  FiHash, FiEdit2, FiX 
+} from 'react-icons/fi';
+import { useAppContext } from '../../context/AppContext';
 
 const AdminProfile = () => {
-  const { axios, setAdminInfo } = useAppContext();
-  const navigate = useNavigate();
+  const { backendUrl, admin, setAdmin } = useAppContext();
+  
+  const [loading, setLoading] = useState(false);
+  const [isEditing, setIsEditing] = useState(false); // Toggle state
 
-  const [loading, setLoading] = useState(true);
+  const [profileData, setProfileData] = useState({
+    name: '',
+    mail: '',
+    phone: '',
+    adminId: ''
+  });
 
-  // Profile State
-  const [name, setName] = useState("");
-  const [phone, setPhone] = useState("");
-  const [mail, setMail] = useState("");
-  const [createdAt, setCreatedAt] = useState("");
-  const [image, setImage] = useState("");
-
-  // Fetch Admin Profile
+  // Populate data
   useEffect(() => {
-    const fetchProfile = async () => {
-      try {
-        const { data } = await axios.get("/api/admin/is-auth");
-        if (data.success) {
-          const admin = data.admin;
-          setName(admin.name || "");
-          setPhone(admin.phone || "");
-          setMail(admin.mail || "");
-          setImage(admin.image || "");
-          setCreatedAt(admin.createdAt || new Date());
-          setAdminInfo(admin);
-        }
-      } catch (error) {
-        toast.error("Failed to load profile");
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchProfile();
-  }, [axios, setAdminInfo]);
+    if (admin) {
+      setProfileData({
+        name: admin.name || '',
+        mail: admin.mail || '',
+        phone: admin.phone || '',
+        adminId: admin.adminId || ''
+      });
+    }
+  }, [admin]);
 
-  const getAvatar = () => {
-    if (image) return image;
-    return `https://ui-avatars.com/api/?name=${encodeURIComponent(
-      name
-    )}&background=f3f4f6&color=4b5563&size=128`;
+  const handleChange = (e) => {
+    setProfileData({ ...profileData, [e.target.name]: e.target.value });
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50/50">
-        <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-blue-600 border-r-transparent align-[-0.125em]"></div>
-        <p className="mt-4 text-sm font-medium text-gray-500">Loading profile data...</p>
-      </div>
-    );
-  }
+  const cancelEdit = () => {
+    // Revert changes back to current global admin state
+    if (admin) {
+      setProfileData({
+        name: admin.name || '',
+        mail: admin.mail || '',
+        phone: admin.phone || '',
+        adminId: admin.adminId || ''
+      });
+    }
+    setIsEditing(false);
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+
+    try {
+      const { data } = await axios.put(`${backendUrl}/api/admin/update`, {
+        name: profileData.name,
+        mail: profileData.mail,
+        phone: profileData.phone
+      }, {
+        withCredentials: true
+      });
+
+      if (data.success) {
+        toast.success("Profile updated successfully!");
+        
+        // Safety check: Only update context if the function exists
+        if (typeof setAdmin === 'function') {
+          setAdmin(data.admin); 
+        }
+        
+        setIsEditing(false); // Switch back to view mode
+      }
+    } catch (error) {
+      console.error("Profile Update Error:", error); // Prints the REAL error to your browser console
+      toast.error(error.response?.data?.message || "Failed to update profile.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+    
 
   return (
-    <div className="min-h-screen bg-gray-50/50 p-6 md:p-10 font-sans text-gray-900">
-      <div className="max-w-4xl mx-auto space-y-6">
+    <div className="p-6 md:p-8 w-full max-w-4xl mx-auto animate-fade-in font-sans">
+      
+      {/* Header */}
+      <div className="flex items-center justify-between mb-8">
+        <div>
+          <h1 className="text-3xl font-serif font-bold text-navy tracking-tight flex items-center gap-3">
+            <FiUser className="text-indigo-500" /> Administrative Profile
+          </h1>
+          <p className="text-slate-500 mt-1 font-medium">Manage your personal credentials and contact information.</p>
+        </div>
+        
+        {!isEditing && (
+          <button 
+            onClick={() => setIsEditing(true)}
+            className="flex items-center gap-2 px-5 py-2.5 bg-indigo-50 text-indigo-600 font-bold rounded-xl hover:bg-indigo-100 transition-colors border border-indigo-100 shadow-sm"
+          >
+            <FiEdit2 size={16} /> Edit Profile
+          </button>
+        )}
+      </div>
 
-        {/* HEADER CARD */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-          {/* Cover Banner */}
-          <div className="h-32 sm:h-40 bg-gradient-to-r from-blue-600 to-indigo-700 w-full relative">
-            <div className="absolute inset-0 bg-white/10 bg-[radial-gradient(#fff_1px,transparent_1px)] [background-size:16px_16px] opacity-20"></div>
-          </div>
-
-          <div className="px-6 sm:px-10 pb-8 flex flex-col sm:flex-row items-center sm:items-end gap-6 sm:gap-8 relative -mt-16 sm:-mt-20">
-            {/* Avatar */}
-            <div className="w-32 h-32 sm:w-40 sm:h-40 rounded-full border-4 border-white shadow-md bg-white overflow-hidden shrink-0 z-10">
-              <img
-                src={getAvatar()}
-                alt="Profile"
-                className="w-full h-full object-cover"
-              />
-            </div>
-
-            {/* Name & Role */}
-            <div className="flex-1 text-center sm:text-left mb-2 mt-4 sm:mt-0">
-              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">{name}</h1>
-              <div className="flex items-center justify-center sm:justify-start gap-2 mt-2">
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-blue-50 text-blue-700 border border-blue-100 text-xs font-semibold tracking-wide uppercase">
-                  <FiShield size={12} />
-                  System Administrator
-                </span>
-              </div>
-            </div>
-
-            {/* Edit Profile Button */}
-            <div className="mb-2 sm:mb-4">
-              <button
-                onClick={() => navigate("/admin/edit-profile")}
-                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-white border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-50 hover:text-blue-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors shadow-sm w-full sm:w-auto justify-center"
-              >
-                <FiEdit3 size={16} />
-                <span>Edit Profile</span>
-              </button>
+      <div className="bg-white rounded-3xl border border-slate-200 shadow-xl overflow-hidden">
+        
+        {/* Decorative Banner */}
+        <div className="h-32 bg-gradient-to-r from-indigo-600 to-sky-500 relative">
+          <div className="absolute -bottom-12 left-8 w-24 h-24 bg-white rounded-full p-1.5 shadow-lg">
+            <div className="w-full h-full bg-slate-100 rounded-full flex items-center justify-center text-slate-400">
+              <FiUser size={40} />
             </div>
           </div>
         </div>
 
-        {/* DETAILS GRID */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-
-          {/* Contact Info */}
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-            <div className="px-6 py-5 border-b border-gray-100 flex items-center gap-3">
-              <div className="p-2 bg-blue-50 text-blue-600 rounded-lg">
-                <FiUser size={18} />
-              </div>
-              <h3 className="text-base font-semibold text-gray-900">Contact Information</h3>
-            </div>
-
-            <div className="p-6 space-y-6">
-              <div>
-                <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Email Address
-                </label>
-                <div className="flex items-center gap-3 mt-2">
-                  <FiMail className="text-gray-400 shrink-0" size={18}/>
-                  <span className="text-sm font-medium text-gray-900 break-all">{mail}</span>
+        <div className="pt-16 px-8 pb-8">
+          
+          {/* ================= VIEW MODE ================= */}
+          {!isEditing ? (
+            <div className="animate-fade-in">
+              <h2 className="text-2xl font-bold text-navy mb-6">{profileData.name || 'Admin User'}</h2>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="p-5 bg-slate-50 border border-slate-100 rounded-2xl">
+                  <div className="flex items-center gap-3 text-slate-400 mb-2">
+                    <FiHash />
+                    <span className="text-xs font-bold uppercase tracking-wider">Admin ID</span>
+                  </div>
+                  <p className="font-bold text-navy text-lg">{profileData.adminId}</p>
                 </div>
-              </div>
 
-              <div>
-                <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Phone Number
-                </label>
-                <div className="flex items-center gap-3 mt-2">
-                  <FiPhone className="text-gray-400 shrink-0" size={18} />
-                  <span className="text-sm font-medium text-gray-900">
-                    {phone || <span className="text-gray-400 italic">Not provided</span>}
-                  </span>
+                <div className="p-5 bg-slate-50 border border-slate-100 rounded-2xl">
+                  <div className="flex items-center gap-3 text-slate-400 mb-2">
+                    <FiMail />
+                    <span className="text-xs font-bold uppercase tracking-wider">Email Address</span>
+                  </div>
+                  <p className="font-bold text-navy text-lg">{profileData.mail}</p>
+                </div>
+
+                <div className="p-5 bg-slate-50 border border-slate-100 rounded-2xl">
+                  <div className="flex items-center gap-3 text-slate-400 mb-2">
+                    <FiPhone />
+                    <span className="text-xs font-bold uppercase tracking-wider">Phone Number</span>
+                  </div>
+                  <p className="font-bold text-navy text-lg">{profileData.phone || 'Not provided'}</p>
                 </div>
               </div>
             </div>
-          </div>
-
-          {/* Account Details */}
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-            <div className="px-6 py-5 border-b border-gray-100 flex items-center gap-3">
-              <div className="p-2 bg-purple-50 text-purple-600 rounded-lg">
-                <FiShield size={18} />
-              </div>
-              <h3 className="text-base font-semibold text-gray-900">Account Details</h3>
-            </div>
-
-            <div className="px-6 py-2">
-              <div className="flex justify-between items-center py-4 border-b border-gray-100 last:border-0">
-                <div className="flex items-center gap-3 text-sm font-medium text-gray-600">
-                  <FiCalendar size={16} className="text-gray-400" />
-                  <span>Member Since</span>
+          ) : (
+            
+          /* ================= EDIT MODE ================= */
+            <form onSubmit={handleSubmit} className="animate-slide-up">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                
+                <div className="md:col-span-2 p-4 bg-slate-50 border border-slate-100 rounded-xl flex items-center gap-4">
+                  <div className="w-10 h-10 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center shrink-0">
+                    <FiHash size={18} />
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Administrative ID</p>
+                    <p className="font-bold text-navy">{profileData.adminId} <span className="text-xs text-slate-400 font-medium ml-2">(Cannot be changed)</span></p>
+                  </div>
                 </div>
-                <span className="text-sm font-semibold text-gray-900">
-                  {new Date(createdAt).toLocaleDateString(undefined, {
-                    year: 'numeric',
-                    month: 'long',
-                    day: 'numeric'
-                  })}
-                </span>
+
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Full Name</label>
+                  <input 
+                    type="text" name="name" required
+                    value={profileData.name} onChange={handleChange}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 text-navy font-bold transition-all"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Email Address</label>
+                  <input 
+                    type="email" name="mail" required
+                    value={profileData.mail} onChange={handleChange}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 text-navy font-bold transition-all"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Phone Number</label>
+                  <input 
+                    type="text" name="phone"
+                    value={profileData.phone} onChange={handleChange}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 text-navy font-bold transition-all"
+                  />
+                </div>
               </div>
 
-              <div className="flex justify-between items-center py-4 border-b border-gray-100 last:border-0">
-                <div className="flex items-center gap-3 text-sm font-medium text-gray-600">
-                  <FiShield size={16} className="text-gray-400" />
-                  <span>Account Status</span>
-                </div>
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-semibold border border-emerald-100">
-                  <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></span>
-                  Active
-                </span>
+              <div className="flex justify-end gap-3 pt-6 mt-6 border-t border-slate-100">
+                <button 
+                  type="button"
+                  onClick={cancelEdit}
+                  disabled={loading}
+                  className="px-6 py-3 rounded-xl font-bold text-slate-500 bg-slate-100 hover:bg-slate-200 transition-colors flex items-center gap-2"
+                >
+                  <FiX /> Cancel
+                </button>
+                <button 
+                  type="submit" 
+                  disabled={loading}
+                  className="px-8 py-3 rounded-xl font-bold text-white bg-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-600/30 transition-all flex items-center justify-center gap-2 disabled:opacity-70"
+                >
+                  {loading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> : <FiSave />}
+                  {loading ? 'Saving...' : 'Save Profile'}
+                </button>
               </div>
-            </div>
-          </div>
+            </form>
+          )}
 
         </div>
       </div>

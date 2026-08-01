@@ -2,27 +2,37 @@ import express from 'express';
 import { 
   createReport, 
   getAdminReports, 
-  getFacultyReports, 
+  getTeacherReports,
   getSystemReports,
   deleteReportById,
   deleteAdminReports,
-  deleteFacultyReports,
+  deleteTeacherReports,
   getReports
 } from '../controllers/reportController.js';
-import {upload} from "../configs/multer.js"
+
+import { upload } from "../configs/multer.js";
+import { adminAuth } from "../middlewares/authAdmin.js";
+
 const reportRouter = express.Router();
 
-reportRouter.post('/create', upload.single('file'), createReport);
+// ==========================================
+// 📤 UPLOAD REPORTS
+// ==========================================
+reportRouter.post('/create', adminAuth, upload.single('file'), createReport);
 
-// Get Reports
-reportRouter.get('/all', getReports);
-reportRouter.get('/admin', getAdminReports);
-reportRouter.get('/faculty', getFacultyReports);
-reportRouter.get('/system', getSystemReports);
+reportRouter.get('/all', adminAuth, getReports);
+reportRouter.delete('/:id', adminAuth, deleteReportById);
 
-// Delete Reports
-reportRouter.delete('/admin', deleteAdminReports);
-reportRouter.delete('/faculty', deleteFacultyReports);
-reportRouter.delete('/:id', deleteReportById);
+// Role-specific fetching
+reportRouter.get('/admin', adminAuth, getAdminReports);
+reportRouter.get('/teacher', adminAuth, getTeacherReports);
+reportRouter.get('/system', adminAuth, getSystemReports);
+
+// ==========================================
+// 🗑️ DELETE REPORTS
+// ==========================================
+reportRouter.delete('/admin', adminAuth, deleteAdminReports);
+reportRouter.delete('/teacher', adminAuth, deleteTeacherReports); 
+reportRouter.delete('/:id', adminAuth, deleteReportById);
 
 export default reportRouter;

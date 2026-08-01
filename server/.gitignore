@@ -1,2 +1,33 @@
+# Environment
 .env
-node_modules
+.env.*
+
+# Node
+node_modules/
+
+# Python
+__pycache__/
+*.pyc
+venv/
+.venv/
+*/venv/
+*/.venv/
+
+# WhatsApp Service
+whatsapp_service/venv/
+whatsapp_service/whatsapp_profile/
+
+# Build
+dist/
+build/
+
+# Logs
+*.log
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db

@@ -1,217 +1,170 @@
-import React, { useState } from "react";
-import {
-  FiUser,
-  FiLock,
-  FiLogOut,
-  FiChevronRight,
-  FiShield,
-  FiInfo,
-  FiLayers,
-  FiX,
-  FiCheckCircle,
-  FiKey
-} from "react-icons/fi";
-import { useNavigate } from "react-router-dom";
-import toast from "react-hot-toast";
-import { useAppContext } from "../../context/AppContext";
+import React, { useState } from 'react';
+import axios from 'axios';
+import toast from 'react-hot-toast';
+import { 
+  FiSettings, FiLock, FiShield, 
+  FiActivity, FiDatabase, FiServer, FiCamera
+} from 'react-icons/fi';
+import { useAppContext } from '../../context/AppContext';
 
 const AdminSettings = () => {
-  const navigate = useNavigate();
-  const { axios, adminInfo, setAdminInfo } = useAppContext();
-
-  // --- STATE FOR DUAL PASSWORD POPUP ---
-  const [showPromoteModal, setShowPromoteModal] = useState(false);
+  const { backendUrl } = useAppContext();
   
-  // ✅ Changed: Now storing password 1 and 2
-  const [authData, setAuthData] = useState({ pass1: "", pass2: "" });
-  const [verifying, setVerifying] = useState(false);
+  const [activeTab, setActiveTab] = useState('security');
+  
+  // System Health State
+  const [sysHealth, setSysHealth] = useState(null);
+  const [pinging, setPinging] = useState(false);
 
-  /* ================= LOGOUT ================= */
-  const handleLogout = async () => {
+  const checkSystemHealth = async () => {
+    setPinging(true);
     try {
-      await axios.post("/api/admin/logout");
-      setAdminInfo(null);
-      toast.success("Logged out successfully");
-      navigate("/");
-    } catch (err) {
-      toast.error("Logout failed");
-    }
-  };
-
-  /* ================= VERIFY DUAL PASSWORDS ================= */
-  const handlePromoteAccess = async (e) => {
-    e.preventDefault();
-    setVerifying(true);
-
-    try {
-      // ✅ Payload keys match the Backend destructuring
-      const payload = {
-        passwordOne: authData.pass1,
-        passwordTwo: authData.pass2
-      };
-
-      const { data } = await axios.post("/api/admin/verify-passwords", payload);
-
+      const { data } = await axios.get(`${backendUrl}/api/admin/health`, {
+        withCredentials: true
+      });
       if (data.success) {
-        toast.success("Identity Verified.");
-        setShowPromoteModal(false);
-        setAuthData({ pass1: "", pass2: "" }); // Clean up
-        navigate("/admin/promote-batch"); 
+        setSysHealth(data);
+        toast.success("System health check completed.");
       }
-    } catch (err) {
-      console.error(err);
-      toast.error(err.response?.data?.message || "Verification Failed");
+    } catch (error) {
+      toast.error("Failed to ping system health.");
     } finally {
-      setVerifying(false);
+      setPinging(false);
     }
   };
 
   return (
-    <div className="max-w-3xl mx-auto space-y-8 animate-fade-in-up pb-10 relative">
-
-      {/* HEADER */}
-      <div>
-        <h1 className="text-2xl font-bold text-slate-800">Settings</h1>
-        <p className="text-sm text-slate-500 mt-1">
-          Manage your admin account and security
-        </p>
+    <div className="p-6 md:p-8 w-full max-w-6xl mx-auto animate-fade-in font-sans">
+      
+      <div className="mb-8">
+        <h1 className="text-3xl font-serif font-bold text-navy tracking-tight flex items-center gap-3">
+          <FiSettings className="text-slate-500" /> System Settings
+        </h1>
+        <p className="text-slate-500 mt-1 font-medium">Manage security preferences and view system diagnostics.</p>
       </div>
 
-      {/* ================= ACCOUNT ================= */}
-      <section className="bg-white rounded-3xl border border-slate-100 shadow-sm">
-        <h2 className="px-6 pt-6 text-sm font-bold text-slate-400 uppercase">
-          Account
-        </h2>
-        <div className="divide-y">
-          <button onClick={() => navigate("/admin/edit-profile")} className="w-full flex items-center justify-between px-6 py-4 hover:bg-slate-50 transition-colors">
-            <div className="flex items-center gap-3">
-              <FiUser className="text-indigo-600" />
-              <span className="font-medium text-slate-700">Edit Profile</span>
-            </div>
-            <FiChevronRight className="text-slate-400" />
-          </button>
-          <button onClick={() => toast("Change password coming soon 🔐")} className="w-full flex items-center justify-between px-6 py-4 hover:bg-slate-50 transition-colors">
-            <div className="flex items-center gap-3">
-              <FiLock className="text-indigo-600" />
-              <span className="font-medium text-slate-700">Change Password</span>
-            </div>
-            <FiChevronRight className="text-slate-400" />
-          </button>
-        </div>
-      </section>
-
-      {/* ================= ACADEMIC OPERATIONS ================= */}
-      <section className="bg-white rounded-3xl border border-indigo-100 shadow-sm overflow-hidden">
-        <h2 className="px-6 pt-6 text-sm font-bold text-indigo-400 uppercase flex items-center gap-2">
-          <FiLayers /> Academic Operations
-        </h2>
-        <div className="p-2">
-          <div 
-            onClick={() => setShowPromoteModal(true)}
-            className="flex items-center justify-between px-4 py-4 m-2 bg-indigo-50 hover:bg-indigo-100 rounded-2xl cursor-pointer border border-indigo-200 transition-all group"
+      <div className="flex flex-col md:flex-row gap-8">
+        
+        {/* Sidebar Navigation */}
+        <div className="w-full md:w-64 shrink-0 space-y-2">
+          <button 
+            onClick={() => setActiveTab('security')}
+            className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl font-bold transition-all ${activeTab === 'security' ? 'bg-navy text-white shadow-lg shadow-navy/20' : 'text-slate-500 hover:bg-slate-100'}`}
           >
-            <div className="flex items-center gap-4">
-              <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center text-indigo-600 shadow-sm">
-                <FiLayers size={20} />
-              </div>
-              <div>
-                <h3 className="font-bold text-indigo-900 group-hover:text-indigo-700 transition-colors">Promote Students</h3>
-                <p className="text-xs text-indigo-600/80">Restricted Access (Dual Auth)</p>
-              </div>
-            </div>
-            <FiChevronRight className="text-indigo-400 group-hover:translate-x-1 transition-transform" />
-          </div>
-        </div>
-      </section>
-
-      {/* ================= SECURITY & SYSTEM ================= */}
-      <section className="bg-white rounded-3xl border border-red-100 shadow-sm">
-        <h2 className="px-6 pt-6 text-sm font-bold text-red-400 uppercase">Security</h2>
-        <div className="divide-y">
-          <button onClick={handleLogout} className="w-full flex items-center gap-3 px-6 py-4 text-red-600 hover:bg-red-50 transition-colors">
-            <FiLogOut />
-            <span className="font-semibold">Logout</span>
+            <FiLock size={18} /> Security
+          </button>
+          <button 
+            onClick={() => {
+              setActiveTab('health');
+              if (!sysHealth) checkSystemHealth();
+            }}
+            className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl font-bold transition-all ${activeTab === 'health' ? 'bg-navy text-white shadow-lg shadow-navy/20' : 'text-slate-500 hover:bg-slate-100'}`}
+          >
+            <FiActivity size={18} /> Diagnostics
           </button>
         </div>
-      </section>
 
-      <section className="bg-white rounded-3xl border border-slate-100 shadow-sm">
-        <h2 className="px-6 pt-6 text-sm font-bold text-slate-400 uppercase">System Info</h2>
-        <div className="px-6 py-4 space-y-4">
-          <div className="flex justify-between text-sm">
-            <span className="text-slate-500">Admin ID</span>
-            <span className="font-mono font-medium text-slate-700">{adminInfo?.adminId || "—"}</span>
-          </div>
-        </div>
-      </section>
-
-      {/* ================= DUAL PASSWORD MODAL ================= */}
-      {showPromoteModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="bg-white w-full max-w-sm rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
-            
-            {/* Modal Header */}
-            <div className="bg-slate-50 p-6 border-b border-slate-100 flex justify-between items-start">
-              <div>
-                <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-                  <FiShield className="text-red-600" /> Dual Authentication
-                </h3>
-                <p className="text-xs text-slate-500 mt-1">High Security Zone. Enter both keys.</p>
-              </div>
-              <button onClick={() => setShowPromoteModal(false)} className="p-1 rounded-full hover:bg-slate-200 text-slate-400 hover:text-slate-600 transition-colors">
-                <FiX size={20} />
-              </button>
-            </div>
-
-            {/* Modal Form */}
-            <form onSubmit={handlePromoteAccess} className="p-6 space-y-5">
+        {/* Content Area */}
+        <div className="flex-1">
+          
+          {/* ======================= SECURITY TAB ======================= */}
+          {activeTab === 'security' && (
+            <div className="bg-white rounded-3xl border border-slate-200 shadow-xl p-6 md:p-8 animate-slide-up">
+              <h2 className="text-xl font-bold text-navy mb-6 border-b border-slate-100 pb-4 flex items-center gap-2">
+                <FiShield className="text-emerald-500" /> Security Settings
+              </h2>
               
-              {/* Password 1 */}
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-1 ml-1 items-center gap-1">
-                  <FiKey className="text-indigo-500" /> Password 1
-                </label>
-                <input 
-                  type="password" 
-                  value={authData.pass1}
-                  onChange={(e) => setAuthData({...authData, pass1: e.target.value})}
-                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-slate-800 text-center tracking-widest font-bold placeholder:font-normal placeholder:tracking-normal placeholder:text-sm"
-                  placeholder="Enter Primary Password"
-                  autoFocus
-                  required
-                />
+              <div className="bg-slate-50 rounded-2xl p-6 border border-slate-200 text-center text-slate-500 mb-8">
+                <FiLock size={48} className="mx-auto mb-4 text-slate-300" />
+                <h3 className="text-lg font-bold text-navy mb-2">Password Management</h3>
+                <p className="text-sm font-medium max-w-md mx-auto">
+                  To change your admin password or master batch password, please contact the{" "}
+                  <strong className="font-bold">Developer</strong> to ensure strict security
+                  protocols are followed.
+                </p>
               </div>
 
-              {/* Password 2 */}
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-1 ml-1 items-center gap-1">
-                  <FiKey className="text-indigo-500" /> Password 2
-                </label>
-                <input 
-                  type="password" 
-                  value={authData.pass2}
-                  onChange={(e) => setAuthData({...authData, pass2: e.target.value})}
-                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-slate-800 text-center tracking-widest font-bold placeholder:font-normal placeholder:tracking-normal placeholder:text-sm"
-                  placeholder="Enter Secondary Password"
-                  required
-                />
+              <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-xl flex items-start gap-3">
+                <FiShield className="text-emerald-500 mt-1 shrink-0" size={20} />
+                <div>
+                  <h4 className="font-bold text-emerald-800">Account Secured</h4>
+                  <p className="text-sm text-emerald-600/90 font-medium mt-1">Your session is currently encrypted with standard JWT authentication. Ensure you log out when using public terminals.</p>
+                </div>
               </div>
+            </div>
+          )}
 
-              <div className="pt-2">
+          {/* ======================= SYSTEM HEALTH TAB ======================= */}
+          {activeTab === 'health' && (
+            <div className="bg-white rounded-3xl border border-slate-200 shadow-xl p-6 md:p-8 animate-slide-up">
+              <div className="flex items-center justify-between mb-6 border-b border-slate-100 pb-4">
+                <h2 className="text-xl font-bold text-navy flex items-center gap-2">
+                  <FiActivity className="text-sky-500" /> System Health
+                </h2>
                 <button 
-                  type="submit" 
-                  disabled={verifying}
-                  className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-lg shadow-indigo-200 transition-all active:scale-95 disabled:opacity-70 flex justify-center items-center gap-2"
+                  onClick={checkSystemHealth}
+                  disabled={pinging}
+                  className="text-sm font-bold text-sky-600 bg-sky-50 px-4 py-2 rounded-lg hover:bg-sky-100 transition-colors flex items-center gap-2 disabled:opacity-50"
                 >
-                  {verifying ? <span className="animate-pulse">Validating Credentials...</span> : <><FiCheckCircle /> Authenticate</>}
+                  <FiActivity className={pinging ? "animate-pulse" : ""} /> Ping Server
                 </button>
               </div>
-            </form>
 
-          </div>
+              {!sysHealth && !pinging ? (
+                <div className="text-center py-12 text-slate-400 font-medium">
+                  Click "Ping Server" to fetch the latest diagnostics.
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    
+                    <div className="p-5 border border-slate-100 bg-slate-50 rounded-2xl flex items-center gap-4">
+                      <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${sysHealth?.database === 'connected' ? 'bg-emerald-100 text-emerald-600' : 'bg-rose-100 text-rose-600'}`}>
+                        <FiDatabase size={24} />
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Database Connection</p>
+                        <p className="font-bold text-navy text-lg capitalize">{sysHealth?.database || 'Checking...'}</p>
+                      </div>
+                    </div>
+
+                    <div className="p-5 border border-slate-100 bg-slate-50 rounded-2xl flex items-center gap-4">
+                      <div className="w-12 h-12 rounded-xl bg-sky-100 text-sky-600 flex items-center justify-center shrink-0">
+                        <FiActivity size={24} />
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Network Latency</p>
+                        <p className="font-bold text-navy text-lg">{sysHealth?.latency ? `${sysHealth.latency} ms` : '---'}</p>
+                      </div>
+                    </div>
+
+                    <div className="p-5 border border-slate-100 bg-slate-50 rounded-2xl flex items-center gap-4">
+                      <div className="w-12 h-12 rounded-xl bg-indigo-100 text-indigo-600 flex items-center justify-center shrink-0">
+                        <FiServer size={24} />
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">API Engine</p>
+                        <p className="font-bold text-navy text-lg capitalize">{sysHealth?.schoolEngine || '---'}</p>
+                      </div>
+                    </div>
+
+                    <div className="p-5 border border-slate-100 bg-slate-50 rounded-2xl flex items-center gap-4">
+                      <div className="w-12 h-12 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center shrink-0">
+                        <FiCamera size={24} />
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Storage Engine</p>
+                        <p className="font-bold text-navy text-lg capitalize">{sysHealth?.storageEngine || '---'}</p>
+                      </div>
+                    </div>
+
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
-      )}
-
+      </div>
     </div>
   );
 };

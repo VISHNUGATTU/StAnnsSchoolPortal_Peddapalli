@@ -1,277 +1,158 @@
-import React, { useEffect, useState } from "react";
-import { 
-  FiTrash2, FiLock, FiArrowLeft, FiSearch, 
-  FiAlertTriangle, FiUser, FiKey, FiCheckCircle 
-} from "react-icons/fi";
-import toast from "react-hot-toast";
-import { useNavigate } from "react-router-dom";
-import { useAppContext } from "../../context/AppContext";
+import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import axios from 'axios';
+import toast from 'react-hot-toast';
+import { FiUserX, FiSearch, FiArrowLeft, FiAlertCircle, FiTrash2, FiUser } from 'react-icons/fi';
+import { useAppContext } from '../../context/AppContext';
 
 const DeleteStudent = () => {
-  const { axios } = useAppContext();
+  const { backendUrl } = useAppContext();
   const navigate = useNavigate();
-
-  // --- STATE ---
-  const [query, setQuery] = useState("");
-  const [results, setResults] = useState([]);
+  
+  const [searchParams, setSearchParams] = useState({ grade: '1', section: 'A', rollno: '' });
+  const [loadingSearch, setLoadingSearch] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [student, setStudent] = useState(null);
+  const [searchError, setSearchError] = useState('');
 
-  // Auth & Confirmation State
-  const [confirmStep, setConfirmStep] = useState(0); // 0: Init, 1: Warning, 2: Auth
-  const [authData, setAuthData] = useState({ pass1: "", pass2: "" });
-  const [loading, setLoading] = useState(false);
+  const handleSearchChange = (e) => {
+    setSearchParams({ ...searchParams, [e.target.name]: e.target.value });
+    if (searchError) setSearchError('');
+  };
 
-  /* ================= LIVE SEARCH ================= */
-  useEffect(() => {
-    if (!query.trim()) {
-      setResults([]);
+  const handleSearch = async (e) => {
+    e.preventDefault();
+    setSearchError('');
+    setStudent(null);
+
+    if (!searchParams.rollno.trim()) {
+      setSearchError("Please enter a Roll Number to search.");
       return;
     }
 
-    const delay = setTimeout(async () => {
-      try {
-        const { data } = await axios.get(`/api/student/search?q=${query}`);
-        setResults(data.students || []);
-      } catch {
-        setResults([]);
+    setLoadingSearch(true);
+    try {
+      const { data } = await axios.get(`${backendUrl}/api/admin/students/all`, { withCredentials: true });
+
+      if (data.success) {
+        const found = data.students.find(s => 
+          s.grade === searchParams.grade && 
+          s.section === searchParams.section && 
+          s.rollno.toLowerCase() === searchParams.rollno.toLowerCase()
+        );
+        
+        if (found) setStudent(found);
+        else setSearchError(`No student record found for Roll Number "${searchParams.rollno}".`);
       }
-    }, 300);
-
-    return () => clearTimeout(delay);
-  }, [query]);
-
-  /* ================= DELETE HANDLER ================= */
-  const handleDelete = async () => {
-    if (!authData.pass1 || !authData.pass2) {
-      return toast.error("Both passwords are required");
+    } catch (error) {
+      setSearchError("Unable to connect to the server.");
+    } finally {
+      setLoadingSearch(false);
     }
+  };
+
+  const handleDelete = async () => {
+    if (!student) return;
+    setDeleting(true);
 
     try {
-      setLoading(true);
-
-      // STEP 1: Verify Dual Passwords
-      // We use the same verification route you set up earlier
-      await axios.post("/api/admin/verify-passwords", {
-        passwordOne: authData.pass1,
-        passwordTwo: authData.pass2
+      const { data } = await axios.delete(`${backendUrl}/api/student/delete/${student._id}`, {
+        withCredentials: true
       });
 
-      // STEP 2: Delete Student
-      // Assuming route is /api/student/delete/:id
-      // Using student._id is safer than rollno for backend deletions
-      await axios.delete(`/api/student/delete/${student._id}`);
-
-      toast.success("Student deleted permanentely.");
-
-      // STEP 3: Reset Form & UI
-      setStudent(null);
-      setQuery("");       // Clear search query
-      setResults([]);     // Clear old results list
-      setConfirmStep(0);  // Reset flow
-      setAuthData({ pass1: "", pass2: "" }); // Clear sensitive inputs
-
-    } catch (err) {
-      console.error(err);
-      toast.error(err.response?.data?.message || "Delete failed. Check passwords.");
+      if (data.success) {
+        toast.success('Student deleted successfully!');
+        navigate('/admin/students');
+      } else {
+        toast.error(data.message || 'Failed to delete student');
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Server error occurred');
     } finally {
-      setLoading(false);
+      setDeleting(false);
     }
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6 animate-fade-in-up pb-10">
-      
-      {/* HEADER */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="p-3 rounded-xl bg-red-100 text-red-600">
-            <FiTrash2 size={22} />
-          </div>
-          <h1 className="text-2xl font-bold text-slate-800">
-            Delete Student
+    <div className="p-6 md:p-8 w-full max-w-4xl mx-auto animate-fade-in font-sans">
+      <div className="flex items-center justify-between mb-8">
+        <div>
+          <h1 className="text-3xl font-serif font-bold text-navy flex items-center gap-3">
+            <FiUserX className="text-rose-600" /> Delete Student
           </h1>
+          <p className="text-slate-500 mt-1 font-medium">Permanently remove a student record from the system.</p>
         </div>
-
-        <button
-          onClick={() => navigate("/admin/student-management")}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl
-          border border-slate-200 bg-white text-slate-700
-          font-medium hover:bg-slate-100 transition"
-        >
+        <button onClick={() => navigate('/admin/students')} className="flex items-center gap-2 px-4 py-2 bg-white border rounded-xl text-slate-600 hover:bg-slate-50 shadow-sm">
           <FiArrowLeft /> Back
         </button>
       </div>
 
-      {/* SEARCH BAR */}
-      <div className="relative">
-        <FiSearch className="absolute left-4 top-4 text-slate-400" size={20} />
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search by Name, Roll No, or Email..."
-          className="w-full pl-12 pr-4 py-4 rounded-xl border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-red-500/50 text-slate-700 font-medium shadow-sm transition-all"
-        />
+      <div className="bg-white/80 border border-slate-200 rounded-3xl p-6 md:p-8 shadow-xl mb-8">
+        <form onSubmit={handleSearch} className="flex flex-col md:flex-row gap-4 items-end">
+          <div className="flex-1 w-full grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-2">Grade/Class</label>
+              <select name="grade" value={searchParams.grade} onChange={handleSearchChange} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3.5 outline-none focus:border-rose-500">
+                {["Nursery", "LKG", "UKG", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"].map(g => <option key={g} value={g}>Class {g}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-2">Section</label>
+              <select name="section" value={searchParams.section} onChange={handleSearchChange} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3.5 outline-none focus:border-rose-500">
+                {["A", "B", "C", "D"].map(s => <option key={s} value={s}>Section {s}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-2">Roll Number</label>
+              <input type="text" name="rollno" value={searchParams.rollno} onChange={handleSearchChange} placeholder="Enter Roll No" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3.5 outline-none focus:border-rose-500" />
+            </div>
+          </div>
+          <button type="submit" disabled={loadingSearch} className="px-8 py-3.5 rounded-xl font-bold text-white bg-rose-600 hover:bg-rose-700 h-full">
+            {loadingSearch ? 'Searching...' : 'Search'}
+          </button>
+        </form>
+
+        {searchError && (
+          <div className="mt-6 p-4 bg-rose-50 border border-rose-100 rounded-xl flex items-start gap-3">
+            <FiAlertCircle className="text-rose-500 mt-0.5" /><p className="text-rose-700 text-sm font-medium">{searchError}</p>
+          </div>
+        )}
       </div>
 
-      {/* SEARCH RESULTS LIST */}
-      {!student && results.length > 0 && (
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm divide-y divide-slate-50 overflow-hidden animate-in fade-in slide-in-from-top-2">
-          {results.map((s) => (
-            <div
-              key={s._id}
-              onClick={() => {
-                setStudent(s);
-                setResults([]);
-                setConfirmStep(0);
-                setQuery(""); // Clear input when selected
-              }}
-              className="flex items-center gap-4 p-4 cursor-pointer hover:bg-red-50/50 transition-colors group"
-            >
-              <div className="h-12 w-12 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center overflow-hidden shrink-0">
-                {s.image ? (
-                  <img src={s.image} alt={s.name} className="h-full w-full object-cover" />
-                ) : (
-                  <FiUser className="text-slate-400" />
-                )}
-              </div>
-              <div>
-                <p className="font-bold text-slate-800 group-hover:text-red-700 transition-colors">{s.name}</p>
-                <div className="flex gap-2 text-xs font-medium text-slate-500 mt-0.5">
-                  <span className="bg-slate-100 px-1.5 py-0.5 rounded text-slate-600 font-mono">{s.rollno}</span>
-                  <span>•</span>
-                  <span>{s.year} Year</span>
-                  <span>•</span>
-                  <span>Sec {s.section}</span>
-                  <span>•</span>
-                  <span>{s.branch}</span>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* SELECTED STUDENT CARD & CONFIRMATION FLOW */}
       {student && (
-        <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm space-y-8 animate-in zoom-in-95 duration-200">
-          
-          {/* Student Profile Preview */}
-          <div className="flex flex-col md:flex-row gap-6 items-center md:items-start text-center md:text-left border-b border-slate-100 pb-8">
-             <div className="h-24 w-24 rounded-full bg-slate-100 border-4 border-white shadow-lg overflow-hidden shrink-0">
-                {student.image ? (
-                  <img src={student.image} alt={student.name} className="h-full w-full object-cover" />
-                ) : (
-                  <FiUser className="h-10 w-10 m-auto text-slate-400 relative top-6" />
-                )}
-             </div>
-             <div className="space-y-1">
-                <h2 className="text-2xl font-bold text-slate-900">{student.name}</h2>
-                <p className="text-lg text-slate-500 font-mono">{student.rollno}</p>
-                <div className="flex flex-wrap justify-center md:justify-start gap-2 pt-2">
-                   <span className="px-3 py-1 bg-indigo-50 text-indigo-700 text-xs font-bold rounded-full">{student.branch}</span>
-                   <span className="px-3 py-1 bg-purple-50 text-purple-700 text-xs font-bold rounded-full">Year {student.year}</span>
-                   <span className="px-3 py-1 bg-orange-50 text-orange-700 text-xs font-bold rounded-full">Sec {student.section}</span>
-                </div>
-             </div>
-             
-             {/* Cancel Button */}
-             <button 
-                onClick={() => { setStudent(null); setConfirmStep(0); }}
-                className="md:ml-auto px-4 py-2 text-sm font-bold text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-lg transition"
-             >
-                Cancel
-             </button>
+        <div className="bg-white rounded-3xl border border-rose-100 shadow-2xl p-8 animate-slide-up">
+          <div className="flex items-start gap-6 border-b border-rose-50 pb-6 mb-6">
+            <div className="w-20 h-20 rounded-2xl bg-rose-50 flex items-center justify-center text-rose-500 overflow-hidden shrink-0">
+              {student.image ? (
+                <img src={`${backendUrl}${student.image}`} alt={student.name} className="w-full h-full object-cover" />
+              ) : (
+                <FiUser size={40} />
+              )}
+            </div>
+            <div>
+              <h2 className="text-2xl font-bold text-navy">{student.name}</h2>
+              <p className="text-slate-500 font-medium mt-1">
+                ADNO: <span className="text-navy">{student.adno || 'N/A'}</span> | Roll No: {student.rollno} | Class {student.grade}-{student.section}
+              </p>
+              <span className="inline-block mt-2 px-3 py-1 bg-rose-100 text-rose-700 text-xs font-bold rounded-full uppercase tracking-wider">Ready to Delete</span>
+            </div>
           </div>
 
-          {/* STEP 0: INITIAL DELETE BUTTON */}
-          {confirmStep === 0 && (
-            <div className="flex justify-end">
-              <button
-                onClick={() => setConfirmStep(1)}
-                className="w-full md:w-auto px-8 py-3 bg-red-50 text-red-600 font-bold rounded-xl border border-red-100 hover:bg-red-600 hover:text-white hover:shadow-lg hover:shadow-red-200 transition-all active:scale-95 flex items-center justify-center gap-2"
-              >
-                <FiTrash2 /> Delete This Student
-              </button>
-            </div>
-          )}
+          <div className="bg-rose-50/50 rounded-2xl p-6 mb-8 border border-rose-100">
+            <p className="text-rose-700 font-bold flex items-center gap-2">
+              <FiAlertCircle className="text-rose-500" /> Warning: Destructive Action
+            </p>
+            <p className="text-rose-600/80 text-sm mt-2 font-medium">
+              Deleting this record will permanently remove all associated academic data, attendance logs, and fee records from the database. This action cannot be reversed.
+            </p>
+          </div>
 
-          {/* STEP 1: WARNING */}
-          {confirmStep === 1 && (
-            <div className="bg-red-50 rounded-xl p-6 border border-red-100 animate-in fade-in slide-in-from-top-2">
-               <div className="flex gap-3">
-                  <FiAlertTriangle className="text-red-600 shrink-0 mt-1" size={24} />
-                  <div>
-                     <h3 className="text-red-800 font-bold text-lg">Are you absolutely sure?</h3>
-                     <p className="text-red-600 text-sm mt-1 leading-relaxed">
-                        This action will <b>permanently delete</b> all data for <b>{student.name}</b>, including attendance records, grades, and profile information. This cannot be undone.
-                     </p>
-                  </div>
-               </div>
-               <div className="flex gap-3 mt-6 justify-end">
-                  <button onClick={() => setConfirmStep(0)} className="px-5 py-2.5 bg-white text-slate-600 font-bold rounded-lg border border-slate-200 hover:bg-slate-50">Cancel</button>
-                  <button onClick={() => setConfirmStep(2)} className="px-5 py-2.5 bg-red-600 text-white font-bold rounded-lg hover:bg-red-700 shadow-md">Yes, Proceed</button>
-               </div>
-            </div>
-          )}
-
-          {/* STEP 2: DUAL AUTHENTICATION */}
-          {confirmStep === 2 && (
-            <div className="space-y-4 animate-in fade-in slide-in-from-top-2">
-               <div className="flex items-center gap-2 text-sm font-bold text-slate-500 uppercase">
-                  <FiLock /> Security Verification
-               </div>
-               
-               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-xs font-bold text-slate-400 ml-1 mb-1 block">Password 1</label>
-                    <div className="relative">
-                      <FiKey className="absolute left-3 top-3.5 text-slate-400" />
-                      <input
-                        type="password"
-                        placeholder="Primary Key"
-                        value={authData.pass1}
-                        onChange={(e) => setAuthData({...authData, pass1: e.target.value})}
-                        className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-red-500 transition-all font-bold text-slate-700 placeholder:font-normal"
-                        autoFocus
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="text-xs font-bold text-slate-400 ml-1 mb-1 block">Password 2</label>
-                    <div className="relative">
-                      <FiKey className="absolute left-3 top-3.5 text-slate-400" />
-                      <input
-                        type="password"
-                        placeholder="Secondary Key"
-                        value={authData.pass2}
-                        onChange={(e) => setAuthData({...authData, pass2: e.target.value})}
-                        className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-red-500 transition-all font-bold text-slate-700 placeholder:font-normal"
-                      />
-                    </div>
-                  </div>
-               </div>
-
-               <div className="pt-2 flex justify-end">
-                  <button
-                    onClick={handleDelete}
-                    disabled={loading}
-                    className="w-full md:w-auto px-8 py-3 bg-red-600 text-white font-bold rounded-xl shadow-lg shadow-red-200 hover:bg-red-700 transition-all active:scale-95 disabled:opacity-70 flex items-center justify-center gap-2"
-                  >
-                    {loading ? (
-                      <span className="flex items-center gap-2">
-                         <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                         Verifying...
-                      </span>
-                    ) : (
-                      <>
-                        <FiCheckCircle /> Confirm Permanent Deletion
-                      </>
-                    )}
-                  </button>
-               </div>
-            </div>
-          )}
-
+          <div className="flex gap-4">
+            <button onClick={() => setStudent(null)} className="flex-1 py-3.5 bg-slate-100 text-slate-600 font-bold rounded-xl hover:bg-slate-200">Cancel</button>
+            <button onClick={handleDelete} disabled={deleting} className="flex-1 py-3.5 bg-rose-600 text-white font-bold rounded-xl hover:bg-rose-700 flex items-center justify-center gap-2">
+              {deleting ? 'Removing...' : <><FiTrash2 /> Confirm Delete</>}
+            </button>
+          </div>
         </div>
       )}
     </div>

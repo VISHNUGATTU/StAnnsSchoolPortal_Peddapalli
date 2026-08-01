@@ -1,55 +1,59 @@
 import express from "express";
 import {
   loginStudent,
-  isStudentAuth,
   logoutStudent,
-  getStudentProfile,
-  addStudent,
-  getStudentByRoll,
-  updateStudentByRoll,
-  deleteStudentByRoll,
-  searchStudents,
-  getStudentDashboard,
-  getStudentHomeData,
-  getAttendanceHistory,
   getStudentFullSchedule,
-  updateStudentPassword,
-  updateStudentSettings,
   getSettings,
   updateProfile,
-  updatePassword
+  updatePassword,
+  addStudent,
+  updateStudentById,
+  deleteStudentById,
+  getMyResults,
+  getStudentNotices,
+  getStudentStudyMaterials,
+  getStudentDashboard,
+  getMyAttendance,
+  getStudentExamSchedule,
+  getStudentReports,
+  getStudentFees,
+  getProfile
 } from "../controllers/studentController.js";
+
 import { studentAuth } from "../middlewares/authStudent.js";
-import {facultyAuth} from '../middlewares/authFaculty.js'
-import authAdmin from "../middlewares/authAdmin.js";
+import { adminAuth } from "../middlewares/authAdmin.js";
 import { upload } from "../configs/multer.js";
+import rateLimit from 'express-rate-limit';
+
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, 
+  max: 5, 
+  message: { success: false, message: "Too many attempts, please try again after 15 minutes." }
+});
 
 const studentRouter = express.Router();
 
-/* ================= PUBLIC ROUTES ================= */
-studentRouter.post("/login", loginStudent);
-
-/* ================= STUDENT PRIVATE ROUTES ================= */
-studentRouter.get("/is-auth", studentAuth, isStudentAuth);
+studentRouter.post("/login", loginLimiter, loginStudent);
 studentRouter.post("/logout", studentAuth, logoutStudent);
-studentRouter.get("/profile", studentAuth, getStudentProfile);
+studentRouter.get("/is-auth", studentAuth, (req, res) => res.json({ success: true }));
 
-// 🔥 NEW: Attendance & Dashboard Routes
-studentRouter.get("/dashboard", studentAuth, getStudentDashboard);
-studentRouter.get("/home-data", studentAuth, getStudentHomeData);
-studentRouter.get("/history", studentAuth, getAttendanceHistory);
-studentRouter.get("/full-schedule", studentAuth, getStudentFullSchedule);
-studentRouter.put("/update-password", studentAuth, updateStudentPassword);
-studentRouter.put("/settings", studentAuth, updateStudentSettings);
+studentRouter.get("/schedule", studentAuth, getStudentFullSchedule);
+studentRouter.get("/profile", studentAuth, getProfile);
 studentRouter.get("/settings", studentAuth, getSettings);
-studentRouter.put("/settings/profile", studentAuth, updateProfile);
-studentRouter.put("/settings/security", studentAuth, updatePassword);
-/* ================= ADMIN ONLY ROUTES ================= */
-studentRouter.post("/add", authAdmin, upload.single("image"), addStudent);
-studentRouter.get("/by-roll/:rollno", authAdmin, getStudentByRoll);
-studentRouter.put("/update/:rollno", authAdmin, upload.single("image"), updateStudentByRoll);
-studentRouter.delete("/delete/:id", authAdmin, deleteStudentByRoll);
-studentRouter.get("/search", authAdmin, searchStudents);
-studentRouter.get('/faculty-search', facultyAuth, searchStudents);
+studentRouter.get("/dashboard", studentAuth, getStudentDashboard);
+studentRouter.get("/reports", studentAuth, getStudentReports);
+studentRouter.put("/update-profile", studentAuth, updateProfile);
+studentRouter.put("/update-password", studentAuth, updatePassword);
+studentRouter.get("/my-results", studentAuth, getMyResults);
+studentRouter.get("/attendance", studentAuth, getMyAttendance);
+studentRouter.get("/notices", studentAuth, getStudentNotices);
+studentRouter.get("/study-materials", studentAuth, getStudentStudyMaterials);
+studentRouter.get("/exam-schedule", studentAuth, getStudentExamSchedule);
+studentRouter.get("/fees", studentAuth, getStudentFees);
+
+studentRouter.post("/add", adminAuth, upload.single("image"), addStudent);
+// 🚨 STABILITY FIX: Added Multer middleware to parse nested FormData and images
+studentRouter.put("/update/:id", adminAuth, upload.single("image"), updateStudentById); 
+studentRouter.delete("/delete/:id", adminAuth, deleteStudentById); 
 
 export default studentRouter;

@@ -1,0 +1,88 @@
+import React from 'react';
+import { Link } from 'react-router-dom';
+import { FiUserPlus, FiEdit, FiUserX, FiSearch, FiArrowRight } from 'react-icons/fi';
+
+const TeacherMangement = () => {
+  const managementOptions = [
+    {
+      title: 'Add New Teacher',
+      description: 'Onboard a new faculty member, assign them to a department, and set up their portal access.',
+      icon: <FiUserPlus size={28} />,
+      path: '/admin/add-teacher',
+      color: 'text-emerald-600',
+      bgColor: 'bg-emerald-50',
+      groupHover: 'group-hover:bg-emerald-600 group-hover:text-white'
+    },
+    {
+      title: 'Update Teacher',
+      description: 'Modify existing staff records, update contact details, or change subject allocations.',
+      icon: <FiEdit size={28} />,
+      path: '/admin/update-teacher',
+      color: 'text-indigo-600',
+      bgColor: 'bg-indigo-50',
+      groupHover: 'group-hover:bg-indigo-600 group-hover:text-white'
+    },
+    {
+      title: 'Delete Teacher',
+      description: 'Permanently remove a faculty member\'s record from the school database.',
+      icon: <FiUserX size={28} />,
+      path: '/admin/delete-teacher',
+      color: 'text-rose-600',
+      bgColor: 'bg-rose-50',
+      groupHover: 'group-hover:bg-rose-600 group-hover:text-white'
+    },
+    {
+      title: 'Search Teachers',
+      description: 'Find faculty by employee ID, name, or department to view their full professional profile.',
+      icon: <FiSearch size={28} />,
+      path: '/admin/search-teacher',
+      color: 'text-gold-dark',
+      bgColor: 'bg-gold/10',
+      groupHover: 'group-hover:bg-gold group-hover:text-white'
+    }
+  ];
+
+  return (
+    <div className="p-6 md:p-8 w-full max-w-7xl mx-auto animate-fade-in font-sans">
+      <div className="mb-10">
+        <h1 className="text-3xl font-serif font-bold text-navy tracking-tight">
+          Teacher <span className="text-gold-dark">Management</span>
+        </h1>
+        <p className="text-slate-500 mt-2 font-medium">
+          Select an operation to manage the faculty directory, assign subjects, and maintain staff records.
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-4 gap-6">
+        {managementOptions.map((option, index) => (
+          <Link
+            key={index}
+            to={option.path}
+            className="group relative bg-white/80 backdrop-blur-xl border border-slate-200 rounded-3xl p-8 transition-all duration-300 hover:-translate-y-2 hover:shadow-2xl hover:shadow-navy/5 hover:border-navy/10 overflow-hidden flex flex-col"
+          >
+            <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-slate-50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-bl-full pointer-events-none"></div>
+            
+            <div className={`w-16 h-16 rounded-2xl flex items-center justify-center mb-6 transition-colors duration-300 ${option.bgColor} ${option.color} ${option.groupHover} shadow-sm`}>
+              {option.icon}
+            </div>
+            
+            <h2 className="text-xl font-bold text-navy mb-3 group-hover:text-navy-light transition-colors">
+              {option.title}
+            </h2>
+            
+            <p className="text-sm text-slate-500 font-medium leading-relaxed flex-1">
+              {option.description}
+            </p>
+
+            <div className="mt-6 flex items-center text-sm font-bold text-navy/40 group-hover:text-gold-dark transition-colors duration-300">
+              <span>Access Module</span>
+              <FiArrowRight className="ml-2 transform group-hover:translate-x-1 transition-transform" size={16} />
+            </div>
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+export default TeacherMangement;

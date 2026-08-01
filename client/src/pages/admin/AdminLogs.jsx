@@ -1,28 +1,41 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Trash2, RefreshCw, AlertTriangle, CheckCircle, XCircle, X } from 'lucide-react';
+import toast from 'react-hot-toast';
+import { 
+  FiActivity, FiSearch, FiFilter, FiClock, 
+  FiUser, FiShield, FiDatabase, FiRefreshCw,
+  FiTrash2, FiAlertTriangle, FiCheckCircle, FiXCircle
+} from 'react-icons/fi';
+import { useAppContext } from '../../context/AppContext';
 
 const AdminLogs = () => {
+  const { backendUrl } = useAppContext();
+  
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  
+  // Search and Filter State
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('ALL');
 
-  // --- MODAL STATES ---
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [showClearAllModal, setShowClearAllModal] = useState(false);
-  const [selectedLogId, setSelectedLogId] = useState(null);
+  // Unified Modal State for Single Delete & Clear All
+  const [modal, setModal] = useState({ isOpen: false, type: null, logId: null });
 
-  // --- FETCH LOGS ---
+  // Make sure this matches how you mounted logRoute.js in server.js
+  const API_BASE = `${backendUrl}/api/logs`; 
+
   const fetchLogs = async () => {
     setLoading(true);
     try {
-      const res = await axios.get('/api/logs/admin');
-      if (res.data.success) {
-        setLogs(res.data.data);
+      // Hitting the GET /all route from your logRoute.js
+      const { data } = await axios.get(`${API_BASE}/all`, {
+        withCredentials: true
+      });
+      if (data.success) {
+        setLogs(data.logs);
       }
-    } catch (err) {
-      console.error("Error fetching logs:", err);
-      setError("Failed to load logs.");
+    } catch (error) {
+      toast.error("Failed to load system logs.");
     } finally {
       setLoading(false);
     }
@@ -30,225 +43,257 @@ const AdminLogs = () => {
 
   useEffect(() => {
     fetchLogs();
+    // eslint-disable-next-line
   }, []);
 
-  // --- DELETE HANDLERS ---
-  
-  // 1. Trigger the Single Delete Modal
-  const initiateDelete = (id) => {
-    setSelectedLogId(id);
-    setShowDeleteModal(true);
-  };
-
-  // 2. Confirm Single Delete (API Call)
-  const confirmDelete = async () => {
-    if (!selectedLogId) return;
+  // Filter Logic matching your schema fields
+  // Filter Logic matching your schema fields (Bulletproofed)
+  const filteredLogs = logs.filter(log => {
+    // 1. Safely extract fields, falling back to empty strings if they don't exist
+    const safeTitle = log.title || "";
+    const safeMessage = log.message || "";
+    const safeActorName = log.actor?.name || "";
     
+    // 2. Combine them and convert to lowercase safely
+    const searchTarget = `${safeTitle} ${safeMessage} ${safeActorName}`.toLowerCase();
+    const safeSearchQuery = (searchQuery || "").toLowerCase();
+    
+    // 3. Execute the matching logic
+    const matchesSearch = searchTarget.includes(safeSearchQuery);
+    const matchesStatus = statusFilter === 'ALL' || log.status === statusFilter;
+    
+    return matchesSearch && matchesStatus;
+  });
+
+  // Action Executor (Handles both single delete and clear all)
+  const executeAction = async () => {
     try {
-      const res = await axios.delete(`/api/logs/${selectedLogId}`);
-      if (res.data.success) {
-        setLogs(logs.filter((log) => log._id !== selectedLogId));
-        setShowDeleteModal(false);
-        setSelectedLogId(null);
+      if (modal.type === 'SINGLE' && modal.logId) {
+        const { data } = await axios.delete(`${API_BASE}/${modal.logId}`, { withCredentials: true });
+        if (data.success) {
+          toast.success("Log entry deleted.");
+          setLogs(logs.filter(l => l._id !== modal.logId));
+        }
+      } 
+      else if (modal.type === 'CLEAR_ALL') {
+        const { data } = await axios.delete(`${API_BASE}/clear-all`, { withCredentials: true });
+        if (data.success) {
+          toast.success("All audit logs purged successfully.");
+          setLogs([]);
+        }
       }
-    } catch (err) {
-      alert("Error deleting log");
+    } catch (error) {
+      toast.error("Failed to execute action.");
+    } finally {
+      setModal({ isOpen: false, type: null, logId: null });
     }
   };
 
-  // 3. Confirm Clear All (API Call)
-  const confirmClearAll = async () => {
-    try {
-      const res = await axios.delete('/api/logs/admin');
-      if (res.data.success) {
-        setLogs([]);
-        setShowClearAllModal(false);
-      }
-    } catch (err) {
-      alert("Error clearing logs");
-    }
+  const formatDate = (dateString) => {
+    return new Date(dateString).toLocaleString('en-GB', { 
+      day: 'numeric', month: 'short', year: 'numeric', 
+      hour: '2-digit', minute: '2-digit', second: '2-digit'
+    });
   };
 
-  // Helper for Status Badge
+  // Status Badge Styling
   const getStatusBadge = (status) => {
-    switch (status) {
-      case 'Success':
-        return <span className="flex items-center text-green-600 px-2 py-1 bg-green-100 rounded-full text-xs font-medium"><CheckCircle size={14} className="mr-1"/> Success</span>;
-      case 'Failed':
-        return <span className="flex items-center text-red-600 px-2 py-1 bg-red-100 rounded-full text-xs font-medium"><XCircle size={14} className="mr-1"/> Failed</span>;
-      case 'Warning':
-        return <span className="flex items-center text-yellow-600 px-2 py-1 bg-yellow-100 rounded-full text-xs font-medium"><AlertTriangle size={14} className="mr-1"/> Warning</span>;
-      default:
-        return <span className="text-gray-500 text-xs">{status}</span>;
+    switch(status) {
+      case 'Success': return <span className="flex items-center gap-1 text-emerald-600 bg-emerald-50 px-2 py-1 rounded-md text-xs font-bold border border-emerald-100"><FiCheckCircle /> Success</span>;
+      case 'Failed': return <span className="flex items-center gap-1 text-rose-600 bg-rose-50 px-2 py-1 rounded-md text-xs font-bold border border-rose-100"><FiXCircle /> Failed</span>;
+      case 'Warning': return <span className="flex items-center gap-1 text-amber-600 bg-amber-50 px-2 py-1 rounded-md text-xs font-bold border border-amber-100"><FiAlertTriangle /> Warning</span>;
+      default: return <span className="text-slate-500 bg-slate-100 px-2 py-1 rounded-md text-xs font-bold">{status}</span>;
     }
   };
 
   return (
-    <div className="p-6 bg-gray-50 min-h-screen relative">
+    <div className="p-6 md:p-8 w-full max-w-7xl mx-auto animate-fade-in font-sans relative">
       
-      {/* HEADER */}
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold text-gray-800">Admin Activity Logs</h1>
-        <div className="space-x-2 flex">
+      {/* IN-APP CONFIRMATION MODAL */}
+      {modal.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white rounded-3xl p-6 md:p-8 w-full max-w-sm shadow-2xl animate-slide-up">
+            <div className="w-16 h-16 bg-rose-50 rounded-full flex items-center justify-center mx-auto mb-4">
+              <FiAlertTriangle className="text-rose-500 text-3xl" />
+            </div>
+            <h3 className="text-xl font-bold text-navy text-center mb-2">
+              {modal.type === 'CLEAR_ALL' ? 'Purge All Logs?' : 'Delete Log Entry?'}
+            </h3>
+            <p className="text-slate-500 text-center font-medium text-sm mb-8">
+              {modal.type === 'CLEAR_ALL' 
+                ? 'Are you sure you want to permanently delete ALL system logs? This action cannot be undone.'
+                : 'Are you sure you want to delete this specific log entry?'}
+            </p>
+            <div className="flex gap-3">
+              <button 
+                onClick={() => setModal({ isOpen: false, type: null, logId: null })}
+                className="flex-1 py-3 bg-slate-100 text-slate-600 font-bold rounded-xl hover:bg-slate-200 transition-colors"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={executeAction}
+                className="flex-1 py-3 bg-rose-600 text-white font-bold rounded-xl hover:bg-rose-700 shadow-lg shadow-rose-600/20 transition-colors"
+              >
+                Yes, Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+        <div>
+          <h1 className="text-3xl font-serif font-bold text-navy tracking-tight flex items-center gap-3">
+            <FiActivity className="text-indigo-500" /> System Audit Logs
+          </h1>
+          <p className="text-slate-500 mt-1 font-medium">Monitor administrative actions, security events, and system performance.</p>
+        </div>
+        
+        <div className="flex items-center gap-3 shrink-0">
           <button 
-            onClick={fetchLogs} 
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center shadow-sm"
+            onClick={fetchLogs}
+            disabled={loading}
+            className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-slate-600 font-bold hover:bg-slate-50 hover:text-indigo-600 transition-colors shadow-sm disabled:opacity-70"
           >
-            <RefreshCw size={18} className="mr-2" /> Refresh
+            <FiRefreshCw className={loading ? "animate-spin" : ""} /> Refresh
           </button>
           
-          {logs.length > 0 && (
-            <button 
-              onClick={() => setShowClearAllModal(true)} 
-              className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition flex items-center shadow-sm"
-            >
-              <Trash2 size={18} className="mr-2" /> Clear All
-            </button>
-          )}
+          <button 
+            onClick={() => setModal({ isOpen: true, type: 'CLEAR_ALL' })}
+            disabled={loading || logs.length === 0}
+            className="flex items-center gap-2 px-4 py-2.5 bg-rose-50 border border-rose-200 rounded-xl text-rose-600 font-bold hover:bg-rose-100 transition-colors shadow-sm disabled:opacity-50"
+          >
+            <FiTrash2 /> Delete All Logs
+          </button>
         </div>
       </div>
 
-      {/* TABLE CONTENT */}
-      {loading ? (
-        <div className="flex justify-center items-center h-64 text-gray-500 animate-pulse">Loading logs...</div>
-      ) : error ? (
-        <div className="text-center py-10 text-red-500 bg-red-50 rounded-lg border border-red-200">{error}</div>
-      ) : logs.length === 0 ? (
-        <div className="text-center py-16 bg-white rounded-lg shadow-sm border border-gray-200">
-          <div className="text-gray-400 mb-2">No logs found</div>
-          <p className="text-sm text-gray-500">Activity logs will appear here.</p>
+      {/* Search & Filter Bar */}
+      <div className="bg-white/80 backdrop-blur-xl border border-slate-200 rounded-3xl p-6 shadow-xl shadow-slate-200/40 mb-8 flex flex-col md:flex-row gap-4">
+        
+        <div className="flex-1 relative">
+          <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400">
+            <FiSearch />
+          </div>
+          <input 
+            type="text" 
+            placeholder="Search by title, message, or user..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-11 pr-4 py-3 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 text-navy font-medium"
+          />
         </div>
-      ) : (
-        <div className="bg-white shadow-lg rounded-xl overflow-hidden border border-gray-200">
-          <div className="overflow-x-auto">
-            <table className="min-w-full leading-normal">
+
+        <div className="md:w-64 relative">
+          <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400">
+            <FiFilter />
+          </div>
+          <select 
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-11 pr-4 py-3 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 text-navy font-bold appearance-none cursor-pointer"
+          >
+            <option value="ALL">All Statuses</option>
+            <option value="Success">Success</option>
+            <option value="Failed">Failed</option>
+            <option value="Warning">Warning</option>
+          </select>
+        </div>
+        
+      </div>
+
+      {/* Logs Table */}
+      <div className="bg-white rounded-3xl border border-slate-200 shadow-xl overflow-hidden animate-slide-up">
+        <div className="p-5 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
+          <h2 className="font-bold text-navy flex items-center gap-2">
+            <FiDatabase className="text-slate-400" /> Recent Activity
+          </h2>
+          <span className="text-xs font-bold text-slate-500 bg-slate-200 px-3 py-1 rounded-full">
+            Showing {filteredLogs.length} records
+          </span>
+        </div>
+
+        <div className="overflow-x-auto">
+          {loading ? (
+            <div className="flex flex-col items-center justify-center py-20 text-indigo-500">
+              <div className="w-8 h-8 border-4 border-indigo-200 border-t-indigo-500 rounded-full animate-spin mb-4"></div>
+              <p className="font-bold text-slate-500">Fetching audit trail...</p>
+            </div>
+          ) : filteredLogs.length === 0 ? (
+            <div className="text-center py-16 text-slate-400">
+              <FiShield size={40} className="mx-auto mb-3 text-slate-300" />
+              <p className="font-bold text-lg text-navy">No Logs Found</p>
+              <p className="text-sm font-medium mt-1">System audit trail is currently empty.</p>
+            </div>
+          ) : (
+            <table className="w-full text-left border-collapse min-w-[900px]">
               <thead>
-                <tr className="bg-gray-100 border-b border-gray-200 text-left">
-                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Date</th>
-                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Action</th>
-                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Actor</th>
-                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Message</th>
-                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Status</th>
-                  <th className="px-6 py-4 text-center text-xs font-bold text-gray-500 uppercase tracking-wider">Option</th>
+                <tr className="bg-white border-b border-slate-200">
+                  <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider w-48">Timestamp</th>
+                  <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider w-32">Status</th>
+                  <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider w-32">Action Type</th>
+                  <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider w-48">Actor</th>
+                  <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Details</th>
+                  <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider w-12 text-center"></th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
-                {logs.map((log) => (
-                  <tr key={log._id} className="hover:bg-gray-50 transition duration-150 ease-in-out">
-                    
-                    {/* Date */}
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-gray-900">{new Date(log.createdAt).toLocaleDateString()}</div>
-                      <div className="text-xs text-gray-500">{new Date(log.createdAt).toLocaleTimeString()}</div>
+              <tbody className="divide-y divide-slate-100">
+                {filteredLogs.map((log) => (
+                  <tr key={log._id} className="hover:bg-slate-50 transition-colors group">
+                    <td className="p-4">
+                      <div className="flex items-center gap-2 text-sm font-medium text-slate-500">
+                        <FiClock className="text-slate-400 shrink-0" />
+                        {formatDate(log.createdAt)}
+                      </div>
                     </td>
-
-                    {/* Action Type */}
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="px-2 py-1 text-xs font-semibold rounded bg-gray-200 text-gray-700">
+                    <td className="p-4">
+                      {getStatusBadge(log.status)}
+                    </td>
+                    <td className="p-4">
+                      <span className="text-[10px] font-black px-2.5 py-1 rounded-md tracking-wider border bg-indigo-50 text-indigo-700 border-indigo-200 uppercase">
                         {log.actionType}
                       </span>
                     </td>
-
-                    {/* Actor */}
-                    <td className="px-6 py-4">
-                      <div className="text-sm font-medium text-gray-900">{log.actor?.name || 'Unknown'}</div>
-                      <div className="text-xs text-gray-500">{log.actor?.role}</div>
+                    <td className="p-4">
+                      <div className="flex items-center gap-2">
+                        <div className="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center text-slate-500 shrink-0">
+                          <FiUser size={14} />
+                        </div>
+                        <div>
+                          <p className="text-sm font-bold text-navy leading-tight">{log.actor?.name || 'System'}</p>
+                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{log.actor?.role || 'System'}</p>
+                        </div>
+                      </div>
                     </td>
-
-                    {/* Message */}
-                    <td className="px-6 py-4">
-                      <div className="text-sm font-medium text-gray-900 truncate max-w-xs">{log.title}</div>
-                      <div className="text-xs text-gray-500 truncate max-w-xs" title={log.message}>{log.message}</div>
+                    <td className="p-4">
+                      <p className="text-sm font-bold text-slate-700">{log.title}</p>
+                      {log.message && (
+                        <p className="text-xs font-medium text-slate-500 mt-0.5 truncate max-w-sm" title={log.message}>
+                          {log.message}
+                        </p>
+                      )}
+                      {log.actor?.ipAddress && (
+                        <p className="text-[10px] font-mono text-slate-400 mt-1">IP: {log.actor.ipAddress}</p>
+                      )}
                     </td>
-
-                    {/* Status */}
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      {getStatusBadge(log.status)}
-                    </td>
-
-                    {/* Delete Button */}
-                    <td className="px-6 py-4 text-center whitespace-nowrap">
+                    <td className="p-4 text-center">
                       <button 
-                        onClick={() => initiateDelete(log._id)} 
-                        className="text-gray-400 hover:text-red-600 transition p-2 rounded-full hover:bg-red-50"
-                        title="Delete Log"
+                        onClick={() => setModal({ isOpen: true, type: 'SINGLE', logId: log._id })}
+                        className="w-8 h-8 bg-white border border-slate-200 text-rose-400 rounded-full flex items-center justify-center shadow-sm opacity-0 group-hover:opacity-100 hover:bg-rose-500 hover:text-white transition-all hover:border-rose-500"
+                        title="Delete Log Entry"
                       >
-                        <Trash2 size={18} />
+                        <FiTrash2 size={14} />
                       </button>
                     </td>
-
                   </tr>
                 ))}
               </tbody>
             </table>
-          </div>
+          )}
         </div>
-      )}
-
-      {/* --- CONFIRMATION MODAL (SINGLE DELETE) --- */}
-      {showDeleteModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-lg shadow-2xl max-w-sm w-full p-6 animate-fade-in-up">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-bold text-gray-900">Delete Log?</h3>
-              <button onClick={() => setShowDeleteModal(false)} className="text-gray-400 hover:text-gray-600">
-                <X size={20} />
-              </button>
-            </div>
-            <p className="text-gray-600 mb-6">
-              Are you sure you want to delete this log? This action cannot be undone.
-            </p>
-            <div className="flex justify-end gap-3">
-              <button 
-                onClick={() => setShowDeleteModal(false)}
-                className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition"
-              >
-                Cancel
-              </button>
-              <button 
-                onClick={confirmDelete}
-                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition shadow-md"
-              >
-                Delete
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* --- CONFIRMATION MODAL (CLEAR ALL) --- */}
-      {showClearAllModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-lg shadow-2xl max-w-md w-full p-6 animate-fade-in-up border-t-4 border-red-500">
-            <div className="flex items-start gap-4 mb-4">
-              <div className="p-3 bg-red-100 rounded-full text-red-600">
-                <AlertTriangle size={24} />
-              </div>
-              <div>
-                <h3 className="text-lg font-bold text-gray-900">Clear All Logs?</h3>
-                <p className="text-gray-600 mt-1">
-                  You are about to delete <strong>all Admin activity history</strong>. This is a destructive action and cannot be reversed.
-                </p>
-              </div>
-            </div>
-            
-            <div className="flex justify-end gap-3 mt-6">
-              <button 
-                onClick={() => setShowClearAllModal(false)}
-                className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition"
-              >
-                Cancel
-              </button>
-              <button 
-                onClick={confirmClearAll}
-                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition shadow-md font-medium"
-              >
-                Yes, Clear All
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      </div>
 
     </div>
   );
