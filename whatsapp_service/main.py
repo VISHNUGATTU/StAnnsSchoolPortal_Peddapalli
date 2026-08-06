@@ -1,46 +1,65 @@
 import time
-import webbrowser
+import subprocess
 import pyautogui
 from urllib.parse import quote
-from fastapi import FastAPI, HTTPException
+
+from fastapi import FastAPI
 from pydantic import BaseModel
 from typing import List
+import uvicorn
 
 app = FastAPI()
+@app.get("/")
+async def root():
+    return {"message": "Server is running"}
 
 class Alert(BaseModel):
     phone: str
     message: str
 
+
 class AlertPayload(BaseModel):
     alerts: List[Alert]
 
+
 @app.post("/api/whatsapp/send")
 async def send_whatsapp_alerts(payload: AlertPayload):
-    success_count = 0
+
+    dispatched = 0
 
     for alert in payload.alerts:
-        try:
-            formatted_phone = "".join(filter(str.isdigit, alert.phone))
-            if len(formatted_phone) == 10:
-                formatted_phone = f"91{formatted_phone}"
-            
-            encoded_msg = quote(alert.message)
-            url = f"whatsapp://send?phone={formatted_phone}&text={encoded_msg}"
-            
-            webbrowser.open(url)
-            
-            time.sleep(8)
-            
-            pyautogui.press('enter')
-            
-            time.sleep(2)
-            success_count += 1
-        except Exception:
+
+        phone = "".join(filter(str.isdigit, alert.phone))
+
+        if len(phone) == 10:
+            phone = "91" + phone
+
+        if len(phone) != 12:
             continue
 
-    return {"success": True, "dispatched": success_count, "total": len(payload.alerts)}
+        message = quote(alert.message)
+
+        url = f"whatsapp://send?phone={phone}&text={message}"
+
+        # Open in WhatsApp Desktop
+        subprocess.Popen(["cmd", "/c", "start", "", url], shell=True)
+
+        # Wait until chat loads
+        time.sleep(8)
+
+        # Send
+        pyautogui.press("enter")
+
+        time.sleep(2)
+
+        dispatched += 1
+
+    return {
+        "success": True,
+        "dispatched": dispatched,
+        "total": len(payload.alerts),
+    }
+
 
 if __name__ == "__main__":
-    import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
